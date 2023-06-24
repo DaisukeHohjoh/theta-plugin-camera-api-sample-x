@@ -1,6 +1,10 @@
 package com.theta360.sample.camera
 
+import android.content.Intent
+import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
@@ -17,10 +21,8 @@ import com.theta360.pluginlibrary.receiver.KeyReceiver
 import theta360.hardware.Camera
 import theta360.media.CamcorderProfile
 import theta360.media.MediaRecorder
-import java.io.File
-import java.io.FileNotFoundException
-import java.io.FileOutputStream
-import java.io.IOException
+import java.io.*
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -63,6 +65,17 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
     private var mLedPowerBrightness:  IntArray = intArrayOf(0, 0, 0, 64)   //(dummy,R,G,B)
     private var mLedStatusBrightness: IntArray = intArrayOf(0, 0, 0, 64)   //(dummy,R,G,B)
 
+    //====MediaCodec====
+    private var mBuffer: ByteArray? = null
+    private var mIFramePeriod = 10
+    private var mEncoderFps = 30
+    private var mBufSize = 0
+    private var mBufCount = 12
+    private var mFrameId = 1
+    private var mStartFPS: Long = 0
+    private var mFrameBuffers: Array<ByteBuffer?> = arrayOfNulls(mBufCount)
+    private var mCameraVideoEncoder: CameraVideoEncoder? = null
+
     //location
     private val mLocationManager: LocationManagerUtil by lazy {
         val manager = LocationManagerUtil(this)
@@ -90,7 +103,8 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
             override fun onKeyDown(p0: Int, p1: KeyEvent?) {
                 if (p0 == KeyReceiver.KEYCODE_CAMERA ||
                     p0 == KeyReceiver.KEYCODE_VOLUME_UP) {  //Bluetooth remote shutter
-                    button_image.callOnClick()      //executeTakePicture()
+                    //button_image.callOnClick()      //executeTakePicture()
+                    button_video.callOnClick()        //executeStart/StopVideo()
                 }
             }
             override fun onKeyUp(p0: Int, p1: KeyEvent?) {
@@ -102,6 +116,18 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                     if(isRecording) {
                         button_video.callOnClick()  //stopVideoRecording()
                     }
+                }
+                if (p0 == KeyReceiver.KEYCODE_CAMERA) {
+                    //
+                    // Test Code
+                    //
+                    /*
+                    try {
+                        // $ adb reboot
+                        execAdbCommand("reboot", "")
+                    } catch (ignored: IOException) {
+                    }
+                    */
                 }
             }
         })
@@ -136,7 +162,8 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
             if (!isRecording) {
                 switch_camera.isClickable = false
                 enableAllButtons(false)
-                startVideoRecording()
+                //startVideoRecording()    //MediaRecorder
+                startVideoRecordingMC()    //MediaCodec
                 mHandler.postDelayed({
                     enableButton(button_video,true)
                     button_video.setText(R.string.stop_video)
@@ -145,7 +172,8 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
             else {
                 switch_camera.isClickable = true
                 enableAllButtons(false)
-                stopVideoRecording()
+                //stopVideoRecording()    //MediaRecorder
+                stopVideoRecordingMC()    //MediaCodec
                 enableAllButtons(true)
                 button_video.setText(R.string.start_video)
             }
@@ -159,10 +187,10 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         setSpinner(spinner_ric_shooting_mode_preview, getResources().getStringArray(
             if (version >= 1200) R.array.RIC_SHOOTING_MODE_PREVIEW_ARRAY
             else                 R.array.RIC_SHOOTING_MODE_PREVIEW_OLD_ARRAY))
-        spinner_ric_shooting_mode_preview.setSelection(0)       //RicPreview1024
-        spinner_ric_shooting_mode_image.setSelection(0)         //RicStillCaptureStd
+        spinner_ric_shooting_mode_preview.setSelection(6)       //RicPreview5760
+        spinner_ric_shooting_mode_image.setSelection(2)         //RicStillCaptureYuvHdr
         spinner_ric_shooting_mode_video.setSelection(1)         //RicMovieRecording3840
-        spinner_ric_proc_stitching.setSelection(2)              //RicDynamicStitchingAuto
+        spinner_ric_proc_stitching.setSelection(1)              //RicStaticStitching
         spinner_ric_proc_zenith_correction.setSelection(1)      //RicZenithCorrectionOnAuto
 
         //TextureView : show preview
@@ -314,9 +342,48 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         }
         mCamera!!.apply {
             setCameraParameters(MODE.PREVIEW)
+            if(mBuffer == null) {
+                Log.d(TAG,"width:"+parameters.previewSize.width+" height:"+parameters.previewSize.height)
+                var size: Int = parameters.previewSize.width * parameters.previewSize.height
+                size = size * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8
+                mBuffer = ByteArray(size)
+
+                addCallbackBuffer(mBuffer)
+                setPreviewCallbackWithTime(mPreviewCallbackBuffer)
+            }
             startPreview()
         }
         isPreview = true
+    }
+
+    val mPreviewCallbackBuffer = object: Camera.PreviewCallbackWithTime {
+        override fun onPreviewFrame(p0: ByteArray?, p1: Camera?, p2: Long) {
+            //Log.i(TAG, "receive preview frame : timestamp="+p2)
+            if (p0 != null && p1 != null) {
+                onPreviewFrameHandler(p0, p1, p2)
+            }
+            mCamera!!.addCallbackBuffer(mBuffer)
+
+            //
+            // Test Code for NV12/21
+            //
+            /*
+            //Log.d(TAG, "PreviewFormat : " + p1!!.parameters.getPreviewFormat())
+            //Log.d(TAG, "PreviewFrameData : " + p0!!.size)
+            mCamera!!.addCallbackBuffer(mBuffer)
+
+            val file = File(preview_jpg_path)
+            if (!file.exists()) {
+                val out = FileOutputStream(file, true)
+                var yuvi: YuvImage = YuvImage(p0, ImageFormat.NV21, 1024, 512, null)
+                //var baos: ByteArrayOutputStream = ByteArrayOutputStream()
+                var rect: Rect = Rect(0, 0, 1024, 512)
+                yuvi.compressToJpeg(rect, 80, out)
+                out.close()
+                Log.d(TAG, "Store PreviewCallback:" + preview_jpg_path)
+            }
+            */
+        }
     }
 
     fun executeStopPreview() {
@@ -522,11 +589,44 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                         p.setPreviewFrameRate(10)
                     }
                 }
+
+                //
+                // CameraVideoEncoder
+                //
+                p.setPreviewFrameRate(1)    //force set fps to 1
+                mBufSize = p.previewSize.width * p.previewSize.height * 3/2
+                Log.d(TAG, "width:"+p.previewSize.width+",height:"+p.previewSize.height+",mBufSize:"+mBufSize)
+                mBufCount = 6
+                mFrameBuffers = arrayOfNulls(mBufCount)
+                for (i in 0 until mBufCount) {
+                    if (mFrameBuffers.get(i) == null) {
+                        mFrameBuffers[i] = ByteBuffer.allocate(mBufSize)
+                    }
+                    //TODO error 修正
+                    //mCamera!!.addCallbackBuffer(mFrameBuffers[i])
+                }
+
+                //
+                // Test Code
+                //
+                //Log.d(TAG, "getPreviewFormat="+p.previewFormat)
+                //p.previewFormat = Camera.Parameters.PIXEL_FORMAT_NV21 //0x11(17):NV21, 0x22(34):PRIVATE
+                //p.previewFormat = Camera.Parameters.PIXEL_FORMAT_NV12 //0x11(17):NV21, 0x22(34):PRIVATE
             }
             MODE.IMAGE -> {
                 p.set(RIC_SHOOTING_MODE, ric_shooting_mode_image)
                 isMultiShot = if(ric_shooting_mode_image.equals("RicStillCaptureStd")) false else true
                 p.setPictureSize(11008, 5504)   //11008*5504 or 5504*2752
+
+                p.set("ai-off", "1")
+
+                //
+                // Test Code
+                //
+                //p.set("RIC_JPEG_COMP_FILESIZE_ENABLED", 0)
+                //p.set("RIC_JPEG_COMP_FILESIZE", 20971520)
+                //p.jpegQuality = 50
+                //Log.d(TAG, "jpegQuality="+p.jpegQuality)
             }
             MODE.VIDEO -> {
                 p.set(RIC_SHOOTING_MODE, ric_shooting_mode_video)
@@ -548,6 +648,16 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
             p.removeGpsData()
         }
         mCamera!!.setParameters(p)
+
+        //
+        // Test Code
+        //
+        //var formats: List<Int> = p.supportedPreviewFormats
+        //Log.d(TAG, "supportedPreviewFormats(size):"+formats.size.toString())
+        //formats.forEach{
+        //    //println(it)
+        //    Log.d(TAG, "supportedPreviewFormats:"+it)
+        //}
     }
 
     //
@@ -596,6 +706,181 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                     ctrlLedStatusBrightness(i, 0)
                 }
             }
+        }
+    }
+
+    @Throws(IOException::class)
+    fun execAdbCommand(vararg command: String?) {
+        val process = ProcessBuilder(*command).start()
+        val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+        var line: String?
+        while (bufferedReader.readLine().also { line = it } != null) {
+            Log.i(TAG, line)
+        }
+    }
+
+    //
+    // CameraVideoEncoder using MediaCodec class related functions
+    //
+    val returnBufferCallback = object : CameraVideoEncoder.returnBufferCallback {
+        override fun onBufferDone(data: ByteArray?) {
+            mCamera!!.addCallbackBuffer(data)
+        }
+    }
+
+    //TODO 要らないのでは
+    private fun startVideoEncoders() {
+        mCameraVideoEncoder?.start()
+    }
+
+    private fun startVideoRecordingMC() {
+        Log.i(TAG,"startVideoRecording(MediaCodec)")
+
+        executeStopPreview()
+
+        mCamera!!.apply {
+            setCameraParameters(MODE.PREVIEW)
+            parameters.previewFrameRate = 1
+        }
+
+        //filename
+        setFolderPath()
+        mFilepath = mPath + "VD" + SimpleDateFormat("HHmmss").format(Date()) + ".MP4"
+        Log.i(TAG, "MP4 file path = " + mFilepath)
+
+        //mFrameId = 1
+        setupVideoEncoders(mFilepath,
+            mCamera!!.parameters.previewSize.width,
+            mCamera!!.parameters.previewSize.height,
+            1, 10_000_000, MediaFormat.MIMETYPE_VIDEO_HEVC) //AVC(H.264) or HEVC(H.265)
+        //TODO encodeFps=30にしていると早送り動画のようになる？
+
+        executeStartPreview()
+
+        notificationAudioMovStart()
+        isRecording = true
+    }
+
+    //TODO startVideoRecordingMCの内部に統合した方が見易い
+    private fun setupVideoEncoders(filePath: String, width: Int, height: Int, encodeFps: Int, bitrate: Int, encoderMimeType: String) {
+        mEncoderFps = encodeFps
+        val encoderHeight = height
+        var returnCb: CameraVideoEncoder.returnBufferCallback? = null
+        val mediaFormat: MediaFormat? = defaultMediaFormat(width, encoderHeight, bitrate, encoderMimeType)
+        returnCb = returnBufferCallback
+
+        val newFilePath = filePath
+        mCameraVideoEncoder =
+            mediaFormat?.let { CameraVideoEncoder(encoderMimeType, it, 0, returnCb, newFilePath) }
+    }
+
+    //TODO startVideoRecordingMCの内部に統合した方が見易い
+    private fun defaultMediaFormat(width: Int, height: Int, bitrate: Int, encoderMimeType: String): MediaFormat? {
+        Log.d(TAG,"MediaFormat :[size]$width×$height[mimeType]$encoderMimeType[bitrate]$bitrate[frame rate]$mEncoderFps[I frame interval]$mIFramePeriod")
+        val mediaFormat = MediaFormat.createVideoFormat(encoderMimeType, width, height)
+        mediaFormat.setInteger(
+            MediaFormat.KEY_COLOR_FORMAT,
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
+        )
+        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, mIFramePeriod)
+        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, mEncoderFps)
+        //following configuration is needed to write colr box in MPEG4Writer
+        mediaFormat.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_FULL)
+        mediaFormat.setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+        mediaFormat.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+        return mediaFormat
+    }
+
+    private fun stopVideoRecordingMC() {
+        Log.i(TAG, "stopVideoRecordingMC")
+        if (isRecording) {
+            releaseMediaCodec()
+        }
+        executeStopPreview()
+        mCamera!!.setPreviewCallbackWithBuffer(null)
+        if (mFrameBuffers != null) {
+            for (i in mFrameBuffers!!.indices) {
+                mFrameBuffers[i] = null
+            }
+            mFrameBuffers = arrayOfNulls(mBufCount)
+            mCameraVideoEncoder = null
+        }
+
+        notificationAudioMovStop()
+        isRecording = false
+        notificationDatabaseUpdate(mFilepath)
+
+        executeStartPreview()
+    }
+
+    private fun releaseMediaCodec() {
+        if (isRecording) {
+            isRecording = false
+            if (mCameraVideoEncoder != null) {
+                mCameraVideoEncoder?.stop()
+            }
+            for (cnt in 0..149) {
+                if (mCameraVideoEncoder!!.isFinish) {
+                    try {
+                        Thread.sleep(100)
+                    } catch (e: InterruptedException) {
+                        Log.e(TAG, e.toString())
+                    }
+                    break
+                }
+                try {
+                    Thread.sleep(100)
+                } catch (e: InterruptedException) {
+                    Log.e(TAG, e.toString())
+                }
+            }
+        }
+    }
+
+    private fun onPreviewFrameHandler(data: ByteArray, camera: Camera, timestamp: Long) {
+        Log.d(TAG, "onPreviewFrameHandler")
+        if (!isRecording) {
+            // Return buffer immediately to camera if not recording
+            mCamera!!.addCallbackBuffer(data)
+            return
+        }
+        if (mFrameBuffers == null) {
+            Log.e(TAG, "FrameBuffers is empty")
+            return
+        }
+        if (mFrameId == 1) {
+            mStartFPS = System.nanoTime()
+        } else if (mFrameId % 100 == 0) {
+            val endTime = System.nanoTime()
+            val costTime: Double = (endTime - mStartFPS).toDouble() / 1000000000
+            val fps: Double = mFrameId / costTime
+            Log.e(TAG, "Preview FPS: " + String.format("%.2f", fps))
+        }
+
+        val frameId: Int = mFrameId++
+        val frameSize = mBufSize
+
+        // Convert the bit numbering so we can properly read the timestamp
+        //val timestampArray = ByteArray(8)
+        //var i = 1
+        //var j = 0
+        //while (i < 9) {
+        //    timestampArray[j] = data[data.size - i]
+        //    i++
+        //    j++
+        //}
+        //val timestamp = ByteBuffer.wrap(timestampArray).long
+        Log.d(TAG, "onPreviewFrameHandler:time stamp$timestamp")
+        val frameBuffer: FrameBuffer = FrameBuffer(data, frameId, frameSize, timestamp)
+        Log.d(TAG, "new frameBuffer $frameId , $frameSize , $timestamp")
+
+        //TODO mabiki Test Code
+        //if (frameId == 1 || (frameId-1)%5 == 0) {
+            mCameraVideoEncoder?.addFrameBuffer(frameBuffer)
+        //}
+        if (frameId == 1) {
+            startVideoEncoders()
         }
     }
 }
