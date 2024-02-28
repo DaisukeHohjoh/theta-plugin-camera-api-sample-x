@@ -383,6 +383,17 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                     //TODO
                     findViewById<Switch>(R.id.switch_camera).isClickable = true
                     enableAllButtons(true)
+
+                    //TODO
+                    //hdr_f/r.rawにメタデータを付けて.DNGとして保存し直す
+                    rawToDng(
+                        "storage/emulated/0/hdr_f.raw",
+                        mFilepath.replace(".JPG","_HDR_F.DNG")
+                    )
+                    rawToDng(
+                        "storage/emulated/0/hdr_r.raw",
+                        mFilepath.replace(".JPG","_HDR_R.DNG")
+                    )
                 }
             )
         }
@@ -627,6 +638,9 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         }
     }
 
+    //
+    // For Shell Command
+    //
     @Throws(IOException::class)
     fun execShellCommand(vararg command: String?) {
         val process = ProcessBuilder(*command).start()
@@ -635,5 +649,14 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         while (bufferedReader.readLine().also { line = it } != null) {
             Log.i(TAG, line)
         }
+    }
+
+    //
+    // For JNI
+    //
+    open external fun rawToDng(_src: String?, _dst: String?): Int
+    init
+    {
+        System.loadLibrary("dngLib")
     }
 }
