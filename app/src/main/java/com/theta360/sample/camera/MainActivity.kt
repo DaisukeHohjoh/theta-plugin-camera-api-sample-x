@@ -18,10 +18,7 @@ import com.theta360.pluginlibrary.receiver.KeyReceiver
 import theta360.hardware.Camera
 import theta360.media.CamcorderProfile
 import theta360.media.MediaRecorder
-import java.io.File
-import java.io.FileNotFoundException
-import java.io.FileOutputStream
-import java.io.IOException
+import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -169,7 +166,7 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
             if (version >= 2400) R.array.RIC_SHOOTING_MODE_IMAGE_ARRAY
             else                 R.array.RIC_SHOOTING_MODE_IMAGE_OLD_ARRAY))
         spinner_ric_shooting_mode_preview.setSelection(0)       //RicPreview1024
-        spinner_ric_shooting_mode_image.setSelection(0)         //RicStillCaptureStd
+        spinner_ric_shooting_mode_image.setSelection(2)         //RicStillCaptureMultiYuvHdr
         spinner_ric_shooting_mode_video.setSelection(1)         //RicMovieRecording3840
         spinner_ric_proc_stitching.setSelection(2)              //RicDynamicStitchingAuto
         spinner_ric_proc_zenith_correction.setSelection(1)      //RicZenithCorrectionOnAuto
@@ -199,6 +196,10 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         setAutoClose(false)     //the flag which does not finish plug-in in onPause
         closeCamera()
         mLocationManager.stop()
+
+        //Disable HDR-DNG output for Preprocessing-Lib
+        execShellCommand("setprop", "vendor.ricoh.hdr.rawoutput", "0")
+
         super.onPause()
     }
 
@@ -206,6 +207,9 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         Log.i(TAG,"onResume")
         setAutoClose(true)      //the flag which does finish plug-in by long-press MODE
         super.onResume()
+
+        //Enable HDR-DNG output for Preprocessing-Lib
+        execShellCommand("setprop", "vendor.ricoh.hdr.rawoutput", "1")
 
         if (isInitialized) {
             openCamera(null)
@@ -620,6 +624,16 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                     ctrlLedStatusBrightness(i, 0)
                 }
             }
+        }
+    }
+
+    @Throws(IOException::class)
+    fun execShellCommand(vararg command: String?) {
+        val process = ProcessBuilder(*command).start()
+        val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+        var line: String?
+        while (bufferedReader.readLine().also { line = it } != null) {
+            Log.i(TAG, line)
         }
     }
 }
