@@ -14,11 +14,12 @@ const char* TAG = "Camera_API_Sample";
 
 extern "C" JNIEXPORT int JNICALL
 Java_com_theta360_sample_camera_MainActivity_rawToDng(
-        JNIEnv* env, jobject thiz, jstring _src, jstring _dst
+        JNIEnv* env, jobject thiz, jstring _src, jstring _dst, jstring _jpeg
 ){
     const char* src = env->GetStringUTFChars(_src, 0);
     const char* dst = env->GetStringUTFChars(_dst, 0);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "src:%s dst:%s", src, dst);
+    const char* jpegpath = env->GetStringUTFChars(_jpeg, 0);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "src:%s dst:%s _jpeg:%s", src, dst, jpegpath);
 
     //TODO
     char filename[256];
@@ -60,7 +61,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
 
     //-----------------------------------------
     // JPEGからの情報抜き出しをちょっとやってみる
-    std::ifstream jpgifs("/storage/emulated/0/DCIM/100_TEST/PC085734.JPG", std::ios::binary);
+    std::ifstream jpgifs(jpegpath, std::ios::binary);
     jpgifs.seekg(0, std::ios::end);
     std::streamsize jpgsize = jpgifs.tellg();
     jpgifs.seekg(0, std::ios_base::beg);

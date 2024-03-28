@@ -388,11 +388,11 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                     //hdr_f/r.rawにメタデータを付けて.DNGとして保存し直す
                     rawToDng(
                         "storage/emulated/0/hdr_f.raw",
-                        mFilepath.replace(".JPG","_HDR_F.DNG")
+                        mFilepath.replace(".JPG","_HDR_F.DNG"),mFilepath
                     )
                     rawToDng(
                         "storage/emulated/0/hdr_r.raw",
-                        mFilepath.replace(".JPG","_HDR_R.DNG")
+                        mFilepath.replace(".JPG","_HDR_R.DNG"),mFilepath
                     )
                 }
             )
@@ -654,7 +654,7 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
     //
     // For JNI
     //
-    open external fun rawToDng(_src: String?, _dst: String?): Int
+    open external fun rawToDng(_src: String?, _dst: String?, _jpeg: String?): Int
     init
     {
         System.loadLibrary("dngLib")
