@@ -69,19 +69,20 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     char *jpeg_bytes;
     jpeg_bytes = new char[jpgsize];
     if (jpgifs.read(jpeg_bytes, jpgsize)) {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] succeed at read jpeg file, size = %lu", jpgsize);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] succeed at read jpeg file, size = %lu", jpgsize);
 
     }
     else {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] error caused during open jpeg file!!");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] error caused during open jpeg file!!");
     }
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x %x %x", jpeg_bytes[0], jpeg_bytes[1], jpeg_bytes[2], jpeg_bytes[3], jpeg_bytes[4], jpeg_bytes[5]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x %x %x", jpeg_bytes[6], jpeg_bytes[7], jpeg_bytes[8], jpeg_bytes[9], jpeg_bytes[10], jpeg_bytes[11]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x", jpeg_bytes[12], jpeg_bytes[13], jpeg_bytes[14], jpeg_bytes[15]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x", jpeg_bytes[16], jpeg_bytes[17], jpeg_bytes[18], jpeg_bytes[19]);
+    //JPEGのヘッダ情報
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] bite = %x %x %x %x %x %x", jpeg_bytes[0], jpeg_bytes[1], jpeg_bytes[2], jpeg_bytes[3], jpeg_bytes[4], jpeg_bytes[5]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] bite = %x %x %x %x %x %x", jpeg_bytes[6], jpeg_bytes[7], jpeg_bytes[8], jpeg_bytes[9], jpeg_bytes[10], jpeg_bytes[11]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] bite = %x %x %x %x", jpeg_bytes[12], jpeg_bytes[13], jpeg_bytes[14], jpeg_bytes[15]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] bite = %x %x %x %x", jpeg_bytes[16], jpeg_bytes[17], jpeg_bytes[18], jpeg_bytes[19]);
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] タグ数 = %x%x = %d タグ = %x%x", jpeg_bytes[20], jpeg_bytes[21],(jpeg_bytes[20] << 2) + jpeg_bytes[21], jpeg_bytes[22],jpeg_bytes[23]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] タグ数 = %x%x = %d タグ = %x%x", jpeg_bytes[20], jpeg_bytes[21],(jpeg_bytes[20] << 2) + jpeg_bytes[21], jpeg_bytes[22],jpeg_bytes[23]);
 
     int t = (int)(jpeg_bytes[16] << 2) + (int)jpeg_bytes[17];
     //-----------------------------------------
@@ -106,7 +107,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     jpgifs.seekg(ADR_IFDSTART+ADR_OFFSET, std::ios_base::beg);  //offset:ADR_IFDSTART = 4　JPEGは20番目からスタート
     jpgifs.read(ver, 4);
     int adr_ifd_s = b2i(ver, sizeof(ver)) + ADR_IFDSTART;
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] adr_ifd_start = %d", adr_ifd_s);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] adr_ifd_start = %d", adr_ifd_s);
 
     //e_lists.clear();
     //exf_lists.clear();
@@ -122,19 +123,19 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //number of tag count
     int ent_cnt = _readdngLib.readEntryCnt(jpgifs, adr_ifd_s);
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EntryCount = %d", ent_cnt);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] EntryCount = %d", ent_cnt);
 
     //read entries
     int adr_ent = adr_ifd_s + 2;
     for (int i = 0; i < ent_cnt; i++) {
         dngEntry * e = new dngEntry();
-        //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] adr_ent = %d", adr_ent);
+        //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] adr_ent = %d", adr_ent);
 
         _readdngLib.readEntryEach(jpgifs, adr_ent, *e);
         //std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
         /*if (e->length *  b2i(e->num, sizeof(e->num)) > 4) {
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] extra= %d", e->edata);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra= %d", e->edata);
         }*/
 
         /*for (int j = 0; j < _readdngLib.e_lists.size(); ++j) {
@@ -154,12 +155,12 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //----------
     int searchExif = _readdngLib.searchEntry(0x8769);
     if(searchExif == -1){
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] no search 0x8769");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] no search 0x8769");
     }else{
         enableexif = true;
         dngEntry *e_exif = _readdngLib.e_lists[searchExif];
         long eofs = b2i(e_exif->edata, 4);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EXIF point = %d", eofs);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] EXIF point = %d", eofs);
 
 
         //tag count
@@ -167,7 +168,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         ent_cnt = _readdngLib.readEntryCnt(jpgifs, adr_ifd_s);
 
         //std::cout << "EXIF EntryCount = " << int2str(ent_cnt) << std::endl;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EXIF EntryCount = %d", ent_cnt);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] EXIF EntryCount = %d", ent_cnt);
 
         //search entries in IFD
         adr_ent = adr_ifd_s + 2;
@@ -176,16 +177,16 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             dngEntry * e = new dngEntry();
             _readexitdngLib.readEntryEach(jpgifs, adr_ent, *e);
 
-            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] exifdngLib tag=%d type=%d size=%d num=%d data=%d ", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] exifdngLib tag=%d type=%d size=%d num=%d data=%d ", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
             _readexitdngLib.e_lists.push_back(e);
 
             /*if (b2i(e->tag, sizeof(e->tag)) == 0x927c) { //store for RICOH makernote
                 //m_maker_adr = b2i(e->data, sizeof(e->data));
-                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] maker_adr = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] maker_adr = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
             }*/
             adr_ent += 12; //next
         }
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Exif End");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Exif End");
     }
 
     //----------
@@ -193,7 +194,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //----------
     searchExif = _readdngLib.searchEntry(0x8825);
     if(searchExif == -1) {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] gps no search");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] gps no search");
     }else{
         enablegpg = true;
         dngEntry *e_exif = _readdngLib.e_lists[searchExif];
@@ -204,7 +205,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         ent_cnt = _readgpsdngLib.readEntryCnt(jpgifs, adr_ifd_s);
 
         //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] GPS EntryCount = %d", ent_cnt);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] GPS EntryCount = %d", ent_cnt);
 
 
         //search entries in IFD
@@ -213,12 +214,12 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         for (int i = 0; i < ent_cnt; i++) {
             dngEntry * e = new dngEntry();
             _readgpsdngLib.readEntryEach(jpgifs, adr_ent, *e);
-            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
             _readgpsdngLib.e_lists.push_back(e);
             adr_ent += 12; //next
         }
 
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] GPS End");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] GPS End");
     }
 
 
@@ -228,23 +229,23 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     searchExif = enableexif == true ? _readexitdngLib.searchEntry(0x927c) : -1;
 
     if(searchExif == -1) {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote no search");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] makernote no search");
     }else{
         enablemaker = true;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote searchExif = %d", searchExif);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] makernote searchExif = %d", searchExif);
         dngEntry *e_exif = _readexitdngLib.e_lists[searchExif];
         long eofs = b2i(e_exif->dat, 4);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote point = %d", eofs);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] makernote point = %d", eofs);
 
         //tag count
         // MakerNote先頭８byteは"Ricoh000"
         adr_ifd_s = eofs + ADR_IFDSTART + 8;
         ent_cnt = _readmakerdngLib.readEntryCnt(jpgifs, adr_ifd_s);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote header bite = %x %x %x %x %x %x %x %x", jpeg_bytes[eofs + ADR_IFDSTART], jpeg_bytes[eofs + ADR_IFDSTART + 1], jpeg_bytes[eofs + ADR_IFDSTART + 2], jpeg_bytes[eofs + ADR_IFDSTART + 3], jpeg_bytes[eofs + ADR_IFDSTART + 4], jpeg_bytes[eofs + ADR_IFDSTART + 5], jpeg_bytes[eofs + ADR_IFDSTART + 6], jpeg_bytes[eofs + ADR_IFDSTART + 7]);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[eofs + ADR_IFDSTART + 8], jpeg_bytes[eofs + ADR_IFDSTART + 9]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote header bite = %x %x %x %x %x %x %x %x", jpeg_bytes[eofs + ADR_IFDSTART], jpeg_bytes[eofs + ADR_IFDSTART + 1], jpeg_bytes[eofs + ADR_IFDSTART + 2], jpeg_bytes[eofs + ADR_IFDSTART + 3], jpeg_bytes[eofs + ADR_IFDSTART + 4], jpeg_bytes[eofs + ADR_IFDSTART + 5], jpeg_bytes[eofs + ADR_IFDSTART + 6], jpeg_bytes[eofs + ADR_IFDSTART + 7]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x", jpeg_bytes[eofs + ADR_IFDSTART + 8], jpeg_bytes[eofs + ADR_IFDSTART + 9]);
 
         //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote EntryCount = %d", ent_cnt);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote EntryCount = %d", ent_cnt);
 
         //search entries in IFD
         adr_ent = adr_ifd_s + 2;
@@ -253,26 +254,26 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             dngEntry * e = new dngEntry();
             _readmakerdngLib.readEntryEach(jpgifs, adr_ent, *e);
 //          std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
             _readmakerdngLib.e_lists.push_back(e);
 
             if (b2i(e->tag, sizeof(e->tag)) == 0x4001) { //store for ReceptorIFD
-                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] ReceptorIFD = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] ReceptorIFD = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
             }
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1]);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent + 2], jpeg_bytes[adr_ent + 3]);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 8], jpeg_bytes[adr_ent + 9], jpeg_bytes[adr_ent+ 10], jpeg_bytes[adr_ent + 11]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent + 2], jpeg_bytes[adr_ent + 3]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 8], jpeg_bytes[adr_ent + 9], jpeg_bytes[adr_ent+ 10], jpeg_bytes[adr_ent + 11]);
             adr_ent += 12; //next
         }
 
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote End");
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1], jpeg_bytes[adr_ent+ 2], jpeg_bytes[adr_ent + 3]);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote End");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1], jpeg_bytes[adr_ent+ 2], jpeg_bytes[adr_ent + 3]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
     }
 
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor search start");
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor search start");
 
     //----------
     //read Receptor
@@ -280,20 +281,20 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     searchExif = enablemaker == true ? _readmakerdngLib.searchEntry(0x4001) : -1;
 
     if(searchExif == -1) {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor no search");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor no search");
     }else{
         enablereport = true;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor searchExif = %d", searchExif);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor searchExif = %d", searchExif);
         dngEntry *e_exif = _readmakerdngLib.e_lists[searchExif];
         long eofs = b2i(e_exif->dat, 4);
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor point = %d", eofs);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor point = %d", eofs);
 
         //tag count
         adr_ifd_s = eofs + ADR_IFDSTART;
         ent_cnt = _readrecepdngLib.readEntryCnt(jpgifs, adr_ifd_s);
 
         //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor EntryCount = %d", ent_cnt);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor EntryCount = %d", ent_cnt);
 
         //search entries in IFD
         adr_ent = adr_ifd_s + 2;
@@ -302,12 +303,12 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             dngEntry * e = new dngEntry();
             _readrecepdngLib.readEntryEach(jpgifs, adr_ent, *e);
 //          std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
             _readrecepdngLib.e_lists.push_back(e);
             adr_ent += 12; //next
         }
 
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor End");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor End");
     }
 
 
@@ -409,7 +410,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0x0128, SHORT, d_0x0128, 2);
 
     //0x0131 Software
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0131 Software");
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] 0x0131 Software");
     searchTag = _readdngLib.searchEntry(0x0131);
     if(searchTag != -1) {
         _dngLib.copyEntry(_readdngLib.e_lists[searchTag]);
@@ -596,7 +597,6 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //dngLib _exifdngLib;
 
     //0x829A ExposureTime
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x829A ExposureTime");
     searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x829A) : -1;
     if(searchTag != -1) {
         _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
@@ -747,7 +747,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //dngLib _gpsdngLib;
 
     //0x0000 GPS Version
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0000 GPS Version");
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] 0x0000 GPS Version");
     searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0000) : -1;
     if(searchTag != -1) {
         _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
@@ -880,10 +880,9 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
 
     //IDないヘッダー値とかは後ほど
     //MakerNoteHeader
-    //MakerNoteRicoh entries  <- これはタグ数なのでは…？
+    //MakerNoteRicoh entries  <- タグ数
 
     //0x0001 Rdc   //JPEGからコピー箇所　動作確認のため仮値をセット
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0001 Rdc");
     searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x0001) : -1;
     if(searchTag != -1) {
         _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
@@ -933,14 +932,13 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     // Receptor ifd ------------
     //dngLib _recepdngLib;
 
-    //ReceptofIFDEntries  <- これはタグ数なのでは…？
+    //ReceptofIFDEntries  <- タグ数
 
     //0x0001 SphereType
     unsigned char d_r0x0001[2] = { 0x00, 0x03 };
     _recepdngLib.AddEntry(0x0001, SHORT, d_r0x0001, 2);
 
     //0x0002 SphereHDR
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0002 SphereHDR");
     searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0002) : -1;
     if(searchTag != -1) {
         _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
@@ -1243,9 +1241,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     int start_mn = start_gps + 2 + _gpsdngLib.e_lists.size() * 12 + 4;
     int start_rec = start_mn + 2 + _makerdngLib.e_lists.size() * 12 + 4 + 8; //MakerNoteのhead分
 
-    //int test = (int)(ofs.tellp())+ 2 +_dngLib.e_lists.size() * 12 + 4;
-    //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] ofs.tellp()=%x test=%x", (int)(ofs.tellp()), test);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0 size=%d exif size=%d gps size=%d mn size=%d", _dngLib.e_lists.size(), _exifdngLib.e_lists.size(), _gpsdngLib.e_lists.size(), _makerdngLib.e_lists.size());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] data size=%d exif size=%d gps size=%d mn size=%d", _dngLib.e_lists.size(), _exifdngLib.e_lists.size(), _gpsdngLib.e_lists.size(), _makerdngLib.e_lists.size());
 
     for (int i = 0; i < 4; i++) {
         data8769[3 - i] = start_exf & 0xff;
@@ -1260,10 +1256,10 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         start_rec = start_rec >> 8;
     }
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_exf data8769=%x%x%x%x", data8769[0], data8769[1], data8769[2], data8769[3]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_gps data8825=%x%x%x%x", data8825[0], data8825[1], data8825[2], data8825[3]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_mn data927C=%x%x%x%x", data927C[0], data927C[1], data927C[2], data927C[3]);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_rec data4001=%x%x%x%x", data4001[0], data4001[1], data4001[2], data4001[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] start_exf data8769=%x%x%x%x", data8769[0], data8769[1], data8769[2], data8769[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] start_gps data8825=%x%x%x%x", data8825[0], data8825[1], data8825[2], data8825[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] start_mn  data927C=%x%x%x%x", data927C[0], data927C[1], data927C[2], data927C[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] start_rec data4001=%x%x%x%x", data4001[0], data4001[1], data4001[2], data4001[3]);
 
 
     //offset
@@ -1278,7 +1274,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     // Exif IFD : 0x927C MakerNote
     _exifdngLib.DeleteEntry(0x927C);
     _exifdngLib.AddEntry(0x927C, UNDEFINED, data927C, 8 + 2 + (12 * mn_wt));
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] data927C size=%x", 8 + 2 + (12 * mn_wt));
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] data927C size=%x", 8 + 2 + (12 * mn_wt));
 
     // MakerNote : 0x4001 ReceptorIFD
     _makerdngLib.DeleteEntry(0x4001);
@@ -1289,33 +1285,14 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     //dng main part size
     ofs.write(wtotal, 2);
     //2(count) + count * 12 + 4(NextIFD=0)
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
-
-    //debug -------
-    /*dngEntry *e_exif_1 = _dngLib.e_lists[_dngLib.searchEntry(0x8769)];
-    //long eofs = b2i(e_exif_->edata, 4);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8769=%x %x %x %x", e_exif_1->edata[0], e_exif_1->edata[1],e_exif_1->edata[2],e_exif_1->edata[3]);
-
-    dngEntry *e_exif_2 = _dngLib.e_lists[_dngLib.searchEntry(0x8825)];
-    //long eofs = b2i(e_exif_->edata, 4);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8825=%x %x %x %x", e_exif_2->edata[0], e_exif_2->edata[1],e_exif_2->edata[2],e_exif_2->edata[3]);
-
-    dngEntry *e_exif_3 = _exifdngLib.e_lists[_exifdngLib.searchEntry(0x927C)];
-    //long eofs = b2i(e_exif_->edata, 4);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x927C=%x %x %x %x", e_exif_3->edata[0], e_exif_3->edata[1],e_exif_3->edata[2],e_exif_3->edata[3]);
-
-    dngEntry *e_exif_4 = _mndngLib.e_lists[_mndngLib.searchEntry(0x4001)];
-    //long eofs = b2i(e_exif_->edata, 4);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x4001=%x %x %x %x", e_exif_4->edata[0], e_exif_4->edata[1],e_exif_4->edata[2],e_exif_4->edata[3]);*/
-    //debug -------
-
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] wtotal=%x %x", wtotal[0], wtotal[1]);
 
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4y;
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4;
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4 + 8 + 2 + (12 * mn_wt) + 4;
     int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4 + 8 + 2 + (12 * mn_wt) + 4 + 2 + (12 * rec_wt) + 4;
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] offset=%x ofs.tellp=%x", offset, (int)(ofs.tellp()));
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] offset=%x ofs.tellp=%x", offset, (int)(ofs.tellp()));
 
     for (int i = 0; i < _dngLib.e_lists.size(); i++) {
         dngEntry *e = _dngLib.e_lists[i];
@@ -1362,7 +1339,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     wtotal[0] = (char)(exf_wt / 256);
     wtotal[1] = (char)(exf_wt % 256);
     ofs.write(wtotal, 2);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] wtotal=%x %x", wtotal[0], wtotal[1]);
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
     for (int i = 0; i < _exifdngLib.e_lists.size(); i++) {
         dngEntry *e = _exifdngLib.e_lists[i];
@@ -1377,18 +1354,18 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         ofs.write(e->num, 4);
         if (bnum <= 4 || b2i(e->tag,sizeof(e->tag)) == 0x927C) {
             //std::cout << "exif tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, bnum) );
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, bnum) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
             ofs.write(e->edata, bnum);
             ofs.seekp(cadr + 12, std::ios_base::beg);
         }
         else {
             //std::cout << "exif tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
             char pos[4];
             i2b(offset, pos);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%x offset point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △exif tag=%x offset point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
             ofs.write(pos, 4);
             offset += bnum;
             if (bnum % 2 == 1) {
@@ -1399,11 +1376,11 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     ofs.write(z, 4);
 
     //gps
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "gps start point=%x ", (int) ofs.tellp());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] gps start point=%x ", (int) ofs.tellp());
     wtotal[0] = (char) (gps_wt / 256);
     wtotal[1] = (char) (gps_wt % 256);
     ofs.write(wtotal, 2);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] wtotal=%x %x", wtotal[0],wtotal[1]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] wtotal=%x %x", wtotal[0],wtotal[1]);
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
     if(enablegpg) {
         for (int i = 0; i < gps_wt; i++) {
@@ -1420,7 +1397,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             if (bnum <= 4) {
                 // std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
                 __android_log_print(ANDROID_LOG_DEBUG, TAG,
-                                    "gps tag=%d type=%d size=%d num=%d data=%d",
+                                    "[HDR-DNG-META] gps tag=%d type=%d size=%d num=%d data=%d",
                                     b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)),
                                     e->length, b2i(e->num, sizeof(e->num)),
                                     b2i(e->edata, sizeof(e->edata)));
@@ -1430,13 +1407,13 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             } else {
                 // std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
                 __android_log_print(ANDROID_LOG_DEBUG, TAG,
-                                    "△gps tag=%d type=%d size=%d num=%d data=%d",
+                                    "[HDR-DNG-META] △gps tag=%d type=%d size=%d num=%d data=%d",
                                     b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)),
                                     e->length, b2i(e->num, sizeof(e->num)),
                                     b2i(e->edata, sizeof(e->edata)));
                 char pos[4];
                 i2b(offset, pos);
-                __android_log_print(ANDROID_LOG_DEBUG, TAG, "△gps tag=%x point=%x ",
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △gps tag=%x point=%x ",
                                     b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
                 ofs.write(pos, 4);
                 offset += bnum;
@@ -1449,14 +1426,14 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     ofs.write(z, 4);
 
     //makernote
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "makerNote start point=%x ", (int)ofs.tellp());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] makerNote start point=%x ", (int)ofs.tellp());
     char mnhead[8] = { 0x52,0x69,0x63,0x6f,0x68,0x00,0x00,0x00 };  //Ricoh000
     ofs.write(mnhead, 8);
 
     wtotal[0] = (char)(mn_wt / 256);
     wtotal[1] = (char)(mn_wt % 256);
     ofs.write(wtotal, 2);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] wtotal=%x %x", wtotal[0], wtotal[1]);
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
     for (int i = 0; i < mn_wt; i++) {
         dngEntry *e = _makerdngLib.e_lists[i];
@@ -1466,23 +1443,23 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         int bnum = dl * dn;
 
         int cadr = ofs.tellp();
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "makerNote point=%x ", (int)ofs.tellp());
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] makerNote point=%x ", (int)ofs.tellp());
         ofs.write(e->tag, 2);
         ofs.write(e->typ, 2);
         ofs.write(e->num, 4);
         if (bnum <= 4) {
             //           std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "maker data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] maker data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
             ofs.write(e->edata, bnum);
             ofs.seekp(cadr + 12, std::ios_base::beg);
         }
         else {
 //            std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
             char pos[4];
             i2b(offset, pos);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△maker tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △maker tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
             ofs.write(pos, 4);
             offset += bnum;
             if (bnum % 2 == 1) {
@@ -1494,12 +1471,12 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
 
 
     // Receptor IFD
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor start point=%x ", (int)ofs.tellp());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor start point=%x ", (int)ofs.tellp());
 
     wtotal[0] = (char)(rec_wt / 256);
     wtotal[1] = (char)(rec_wt % 256);
     ofs.write(wtotal, 2);
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-META] wtotal=%x %x", wtotal[0], wtotal[1]);
     //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
     for (int i = 0; i < rec_wt; i++) {
         dngEntry *e = _recepdngLib.e_lists[i];
@@ -1514,18 +1491,18 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         ofs.write(e->num, 4);
         if (bnum <= 4) {
             //           std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Receptor data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
             ofs.write(e->edata, bnum);
             ofs.seekp(cadr + 12, std::ios_base::beg);
 
         }
         else {
 //            std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
             char pos[4];
             i2b(offset, pos);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△Receptor tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] △Receptor tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
             ofs.write(pos, 4);
             offset += bnum;
             if (bnum % 2 == 1) {
@@ -1540,10 +1517,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
 
     //------offsetの値を書き込み------------
 
-
-    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] _dngLib.e_lists.size()=%d wt=%d  _exifdngLib.e_lists.size()=%d exf_wt=%d _gpsdngLib.e_lists.size()=%d gps_wt=%d", _dngLib.e_lists.size(), wt, _exifdngLib.e_lists.size(), exf_wt, _gpsdngLib.e_lists.size(), gps_wt);
-
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra start point=%x ", (int)ofs.tellp());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra start point=%x ", (int)ofs.tellp());
     //extra
     for (int i = 0; i < _dngLib.e_lists.size(); i++) {
         dngEntry *e = _dngLib.e_lists[i];
@@ -1555,14 +1529,14 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             ; //no extra
         }
         else {
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp());
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp());
             ofs.write(e->edata, bnum);
             char z[1] = { 0 };
             if (bnum % 2 != 0) ofs.write(z, 1);//fill
         }
     }
 
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif start point=%x ", (int)ofs.tellp());
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra exif start point=%x ", (int)ofs.tellp());
     //仮
     //exif extra
     for (int i = 0; i < _exifdngLib.e_lists.size(); i++) {
@@ -1575,10 +1549,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             ; //no extra
         }
         else {
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
-            if(b2i(e->tag, sizeof(e->tag)) == 36880){
-                __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6]);
-            }
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra exif tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
 
             ofs.write(e->edata, bnum);
             char z[1] = { 0 };
@@ -1587,7 +1558,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     }
 
     if(enablegpg) {
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra gps start point=%x ", (int) ofs.tellp());
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra gps start point=%x ", (int) ofs.tellp());
         //gps extra
         for (int i = 0; i < gps_wt; i++) {
             dngEntry *e = _gpsdngLib.e_lists[i];
@@ -1597,7 +1568,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
 
             if (bnum <= 4) { ; //no extra
             } else {
-                __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra gps tag=%x point=%x ",
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra gps tag=%x point=%x ",
                                     b2i(e->tag, sizeof(e->tag)), (int) ofs.tellp());
                 ofs.write(e->edata, bnum);
                 char z[1] = {0};
@@ -1617,7 +1588,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             ; //no extra
         }
         else {
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra MakerNote tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra MakerNote tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
             ofs.write(e->edata, bnum);
             char z[1] = { 0 };
             if (bnum % 2 != 0) ofs.write(z, 1);//fill
@@ -1635,7 +1606,7 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             ; //no extra
         }
         else {
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra Receptor tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] extra Receptor tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
             ofs.write(e->edata, bnum);
             char z[1] = { 0 };
             if (bnum % 2 != 0) ofs.write(z, 1);//fill
@@ -1743,7 +1714,7 @@ void dngLib::AddEntry(int _tag, int _typ, unsigned char * _dat, int _num)
     (e->typ)[0] = 0xff & (_typ >> 8);
 
     int _length = dtype2bytenum(b2i(e->typ, sizeof(e->typ)));
-    if(_tag == 0x8769) __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8769 Entry length=%d", _length );
+    if(_tag == 0x8769) __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] 0x8769 Entry length=%d", _length );
     e->length = _length;
 
     int __num = _num / e->length;
@@ -1753,7 +1724,7 @@ void dngLib::AddEntry(int _tag, int _typ, unsigned char * _dat, int _num)
     (e->num)[0] = 0xff & (_num >> 24);
 
     if(_tag == 0x927C){
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Entry type=%d", _length );
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] Entry type=%d", _length );
         int mn_num = 4;
         e->new_edata(mn_num);
         for (int i = 0; i < mn_num; i++) {
@@ -1800,10 +1771,6 @@ void dngLib::copyEntry(dngEntry * src)
         e->edata[1] = src->dat[1];
         e->edata[2] = src->dat[2];
         e->edata[3] = src->dat[3];
-        if(b2i(e->tag, sizeof(e->tag)) == 1){
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag0001 srcdata =%x rbytenum=%d", b2i(src->dat, rbytenum),rbytenum);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag0001 =%x%x%x%x", e->edata[0], e->edata[1], e->edata[2], e->edata[3]);
-        }
     }
     else {
         e->new_edata(rbytenum);
@@ -1811,17 +1778,8 @@ void dngLib::copyEntry(dngEntry * src)
             //(e->edata)[i] = _dat[i];
             e->edata[i] = src->edata[i];
         }
-        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] copyEntry edata: edata=%d", b2i(e->edata, 4) );
-        /*if(b2i(e->tag, sizeof(e->tag)) == 36880){
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6]);
-        }
-        //0x0131
-        if(b2i(e->tag, sizeof(e->tag)) == 305){
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6], e->edata[7]);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x", e->edata[8], e->edata[9], e->edata[10], e->edata[11], e->edata[12], e->edata[13], e->edata[14], e->edata[15]);
-            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x %x", e->edata[16], e->edata[17], e->edata[18], e->edata[19], e->edata[20], e->edata[21], e->edata[22], e->edata[23], e->edata[24]);
-        }*/
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] copyEntry edata: edata=%d", b2i(e->edata, 4) );
     }
-    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] copyEntry: tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->edata, 4));
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-META] copyEntry: tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->edata, 4));
     e_lists.push_back(e);
 }
