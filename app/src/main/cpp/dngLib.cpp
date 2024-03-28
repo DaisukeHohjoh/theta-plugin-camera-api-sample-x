@@ -53,7 +53,281 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     ofs.write(raw_bytes, size); //rawdata
     delete raw_bytes;
 
+    // ↑ここまででまずsrcからdstへ丸っと情報をコピー
+    // コピーしたらsrcは不要？なので破棄
+
+
+
+    //-----------------------------------------
+    // JPEGからの情報抜き出しをちょっとやってみる
+    std::ifstream jpgifs("/storage/emulated/0/DCIM/100_TEST/PC085734.JPG", std::ios::binary);
+    jpgifs.seekg(0, std::ios::end);
+    std::streamsize jpgsize = jpgifs.tellg();
+    jpgifs.seekg(0, std::ios_base::beg);
+
+    char *jpeg_bytes;
+    jpeg_bytes = new char[jpgsize];
+    if (jpgifs.read(jpeg_bytes, jpgsize)) {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] succeed at read jpeg file, size = %lu", jpgsize);
+
+    }
+    else {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] error caused during open jpeg file!!");
+    }
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x %x %x", jpeg_bytes[0], jpeg_bytes[1], jpeg_bytes[2], jpeg_bytes[3], jpeg_bytes[4], jpeg_bytes[5]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x %x %x", jpeg_bytes[6], jpeg_bytes[7], jpeg_bytes[8], jpeg_bytes[9], jpeg_bytes[10], jpeg_bytes[11]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x", jpeg_bytes[12], jpeg_bytes[13], jpeg_bytes[14], jpeg_bytes[15]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] bite = %x %x %x %x", jpeg_bytes[16], jpeg_bytes[17], jpeg_bytes[18], jpeg_bytes[19]);
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] タグ数 = %x%x = %d タグ = %x%x", jpeg_bytes[20], jpeg_bytes[21],(jpeg_bytes[20] << 2) + jpeg_bytes[21], jpeg_bytes[22],jpeg_bytes[23]);
+
+    int t = (int)(jpeg_bytes[16] << 2) + (int)jpeg_bytes[17];
+    //-----------------------------------------
+
+
+    //--------------------------------------
+    //--------------------------------------
+
+    //IFD address
+    //readIFDstart(ifs);      //スタート位置の取得。
+
+    int ADR_IFDSTART = 12;  //ouffset
+    int ADR_OFFSET = 4;
+
+    bool enableexif = false;
+    bool enablegpg = false;
+    bool enablemaker = false;
+    bool enablereport = false;
+
+    char ver[4];
+    //std::cout <<"size"<< int2str(sizeof(ver)) << std::endl;
+    jpgifs.seekg(ADR_IFDSTART+ADR_OFFSET, std::ios_base::beg);  //offset:ADR_IFDSTART = 4　JPEGは20番目からスタート
+    jpgifs.read(ver, 4);
+    int adr_ifd_s = b2i(ver, sizeof(ver)) + ADR_IFDSTART;
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] adr_ifd_start = %d", adr_ifd_s);
+
+    //e_lists.clear();
+    //exf_lists.clear();
+    //gps_lists.clear();
+    dngLib _readdngLib;
+    dngLib _readexitdngLib;
+    dngLib _readgpsdngLib;
+    dngLib _readmakerdngLib;
+    dngLib _readrecepdngLib;
+
+
+    _readdngLib.e_lists.clear();
+    //number of tag count
+    int ent_cnt = _readdngLib.readEntryCnt(jpgifs, adr_ifd_s);
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EntryCount = %d", ent_cnt);
+
+    //read entries
+    int adr_ent = adr_ifd_s + 2;
+    for (int i = 0; i < ent_cnt; i++) {
+        dngEntry * e = new dngEntry();
+        //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] adr_ent = %d", adr_ent);
+
+        _readdngLib.readEntryEach(jpgifs, adr_ent, *e);
+        //std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+        /*if (e->length *  b2i(e->num, sizeof(e->num)) > 4) {
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] extra= %d", e->edata);
+        }*/
+
+        /*for (int j = 0; j < _readdngLib.e_lists.size(); ++j) {
+            if (b2i(e->tag, sizeof(e->tag)) == b2i(_readdngLib.e_lists[j]->tag, sizeof(_readdngLib.e_lists[j]->tag))) {
+                _readdngLib.DeleteEntry(b2i(e->tag, sizeof(e->tag)));
+            }
+        }*/
+
+        _readdngLib.e_lists.push_back(e);
+        adr_ent += 12; //next
+    }
+
+    // exif ifd read ----------------------------
+
+    //----------
+    //read exif ifd
+    //----------
+    int searchExif = _readdngLib.searchEntry(0x8769);
+    if(searchExif == -1){
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] no search 0x8769");
+    }else{
+        enableexif = true;
+        dngEntry *e_exif = _readdngLib.e_lists[searchExif];
+        long eofs = b2i(e_exif->edata, 4);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EXIF point = %d", eofs);
+
+
+        //tag count
+        adr_ifd_s = eofs + ADR_IFDSTART;   //ADR_IFDSTART
+        ent_cnt = _readdngLib.readEntryCnt(jpgifs, adr_ifd_s);
+
+        //std::cout << "EXIF EntryCount = " << int2str(ent_cnt) << std::endl;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] EXIF EntryCount = %d", ent_cnt);
+
+        //search entries in IFD
+        adr_ent = adr_ifd_s + 2;
+
+        for (int i = 0; i < ent_cnt; i++) {
+            dngEntry * e = new dngEntry();
+            _readexitdngLib.readEntryEach(jpgifs, adr_ent, *e);
+
+            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] exifdngLib tag=%d type=%d size=%d num=%d data=%d ", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            _readexitdngLib.e_lists.push_back(e);
+
+            /*if (b2i(e->tag, sizeof(e->tag)) == 0x927c) { //store for RICOH makernote
+                //m_maker_adr = b2i(e->data, sizeof(e->data));
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] maker_adr = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
+            }*/
+            adr_ent += 12; //next
+        }
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Exif End");
+    }
+
+    //----------
+    //read gps ifd
+    //----------
+    searchExif = _readdngLib.searchEntry(0x8825);
+    if(searchExif == -1) {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] gps no search");
+    }else{
+        enablegpg = true;
+        dngEntry *e_exif = _readdngLib.e_lists[searchExif];
+        long eofs = b2i(e_exif->edata, 4);
+
+        //tag count
+        adr_ifd_s = eofs + ADR_IFDSTART;
+        ent_cnt = _readgpsdngLib.readEntryCnt(jpgifs, adr_ifd_s);
+
+        //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] GPS EntryCount = %d", ent_cnt);
+
+
+        //search entries in IFD
+        adr_ent = adr_ifd_s + 2;
+
+        for (int i = 0; i < ent_cnt; i++) {
+            dngEntry * e = new dngEntry();
+            _readgpsdngLib.readEntryEach(jpgifs, adr_ent, *e);
+            //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            _readgpsdngLib.e_lists.push_back(e);
+            adr_ent += 12; //next
+        }
+
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] GPS End");
+    }
+
+
+    //----------
+    //read makernote
+    //----------
+    searchExif = enableexif == true ? _readexitdngLib.searchEntry(0x927c) : -1;
+
+    if(searchExif == -1) {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote no search");
+    }else{
+        enablemaker = true;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote searchExif = %d", searchExif);
+        dngEntry *e_exif = _readexitdngLib.e_lists[searchExif];
+        long eofs = b2i(e_exif->dat, 4);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] makernote point = %d", eofs);
+
+        //tag count
+        // MakerNote先頭８byteは"Ricoh000"
+        adr_ifd_s = eofs + ADR_IFDSTART + 8;
+        ent_cnt = _readmakerdngLib.readEntryCnt(jpgifs, adr_ifd_s);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote header bite = %x %x %x %x %x %x %x %x", jpeg_bytes[eofs + ADR_IFDSTART], jpeg_bytes[eofs + ADR_IFDSTART + 1], jpeg_bytes[eofs + ADR_IFDSTART + 2], jpeg_bytes[eofs + ADR_IFDSTART + 3], jpeg_bytes[eofs + ADR_IFDSTART + 4], jpeg_bytes[eofs + ADR_IFDSTART + 5], jpeg_bytes[eofs + ADR_IFDSTART + 6], jpeg_bytes[eofs + ADR_IFDSTART + 7]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[eofs + ADR_IFDSTART + 8], jpeg_bytes[eofs + ADR_IFDSTART + 9]);
+
+        //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote EntryCount = %d", ent_cnt);
+
+        //search entries in IFD
+        adr_ent = adr_ifd_s + 2;
+
+        for (int i = 0; i < ent_cnt; i++) {
+            dngEntry * e = new dngEntry();
+            _readmakerdngLib.readEntryEach(jpgifs, adr_ent, *e);
+//          std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            _readmakerdngLib.e_lists.push_back(e);
+
+            if (b2i(e->tag, sizeof(e->tag)) == 0x4001) { //store for ReceptorIFD
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] ReceptorIFD = %d i = %d", b2i(e->dat, sizeof(e->dat)), i);
+            }
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x", jpeg_bytes[adr_ent + 2], jpeg_bytes[adr_ent + 3]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 8], jpeg_bytes[adr_ent + 9], jpeg_bytes[adr_ent+ 10], jpeg_bytes[adr_ent + 11]);
+            adr_ent += 12; //next
+        }
+
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote End");
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent], jpeg_bytes[adr_ent + 1], jpeg_bytes[adr_ent+ 2], jpeg_bytes[adr_ent + 3]);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] MakerNote entries bite = %x %x %x %x", jpeg_bytes[adr_ent + 4], jpeg_bytes[adr_ent + 5], jpeg_bytes[adr_ent+ 6], jpeg_bytes[adr_ent + 7]);
+    }
+
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor search start");
+
+    //----------
+    //read Receptor
+    //----------
+    searchExif = enablemaker == true ? _readmakerdngLib.searchEntry(0x4001) : -1;
+
+    if(searchExif == -1) {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor no search");
+    }else{
+        enablereport = true;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor searchExif = %d", searchExif);
+        dngEntry *e_exif = _readmakerdngLib.e_lists[searchExif];
+        long eofs = b2i(e_exif->dat, 4);
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor point = %d", eofs);
+
+        //tag count
+        adr_ifd_s = eofs + ADR_IFDSTART;
+        ent_cnt = _readrecepdngLib.readEntryCnt(jpgifs, adr_ifd_s);
+
+        //std::cout << "GPS EntryCount = " << int2str(ent_cnt) << std::endl;
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor EntryCount = %d", ent_cnt);
+
+        //search entries in IFD
+        adr_ent = adr_ifd_s + 2;
+
+        for (int i = 0; i < ent_cnt; i++) {
+            dngEntry * e = new dngEntry();
+            _readrecepdngLib.readEntryEach(jpgifs, adr_ent, *e);
+//          std::cout << "tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->dtype, sizeof(e->dtype)) << " size= " << e->dlength << " num= " << b2i(e->dnum, sizeof(e->dnum)) << " data= " << b2i(e->data, sizeof(e->data)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->dat, sizeof(e->dat)));
+            _readrecepdngLib.e_lists.push_back(e);
+            adr_ent += 12; //next
+        }
+
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Receptor End");
+    }
+
+
+    //--------------------------------------
+    //--------------------------------------
+    //--------------------------------------
+
+    //write
     dngLib _dngLib;
+    dngLib _exifdngLib;
+    dngLib _makerdngLib;
+    dngLib _recepdngLib;
+    dngLib _gpsdngLib;
+
+    int searchTag;
+
+    jpgifs.close();
+    delete jpeg_bytes;
+
+    // ↓ここからメタデータを付与
+    //dngLib _dngLib;
 
     //0x00FE NewSubFileType
     unsigned char d_0x00fe[4] = { 0x00, 0x00, 0x00, 0x00 };
@@ -80,8 +354,23 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0x0106, SHORT, d_0x0106, 2);
 
     //0x010E ImageDescription
+    unsigned char d_0x010e[65] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x20, 0x00 }; //0x20 (64Byte) + 0x00
+    _dngLib.AddEntry(0x010E, ASCII, d_0x010e, 65);
+
     //0x010F Make
+    unsigned char d_0x010f[6] = { 0x52, 0x49, 0x43, 0x4F, 0x48, 0x00 };  //"RICOH"
+    _dngLib.AddEntry(0x010F, ASCII, d_0x010f, 6);
+
     //0x0110 Model
+    unsigned char d_0x0110[14] = { 0x52, 0x49, 0x43, 0x4F, 0x48, 0x20, 0x54, 0x48, 0x45, 0x54, 0x41, 0x20, 0x58, 0x00 };  //"RICOH THETA X"
+    _dngLib.AddEntry(0x0110, ASCII, d_0x0110, 14);
+
     //0x0111 StripOffsets
     unsigned char d_0x0111[4] = { 0x00, 0x00, 0x00, 0x08 };
     _dngLib.AddEntry(0x0111, LONG, d_0x0111, 4);
@@ -103,7 +392,13 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0x0117, LONG, d_0x0117, 4);
 
     //0x011A Xresolution
+    unsigned char d_0x011a[8] = { 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x00, 0x01 };	//300/1
+    _dngLib.AddEntry(0x011A, RATIONAL, d_0x011a, 8);
+
     //0x011B Yresolution
+    unsigned char d_0x011b[8] = { 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x00, 0x01 };	//300/1
+    _dngLib.AddEntry(0x011B, RATIONAL, d_0x011b, 8);
+
     //0x011C PlanarConfiguration
     unsigned char d_0x011c[2] = { 0x00, 0x01 };
     _dngLib.AddEntry(0x011c, SHORT, d_0x011c, 2);
@@ -113,13 +408,33 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0x0128, SHORT, d_0x0128, 2);
 
     //0x0131 Software
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0131 Software");
+    searchTag = _readdngLib.searchEntry(0x0131);
+    if(searchTag != -1) {
+        _dngLib.copyEntry(_readdngLib.e_lists[searchTag]);
+    }
+
     //0x0132 DateTime
+    searchTag = _readdngLib.searchEntry(0x0132);
+    if(searchTag != -1) {
+        _dngLib.copyEntry(_readdngLib.e_lists[searchTag]);
+    }
+
     //0x0153 SampleFormat
     unsigned char d_0x0153[2] = { 0x00, 0x03 };	//float
     _dngLib.AddEntry(0x0153, SHORT, d_0x0153, 2);
 
     //0x0213 YCbCrPositioning
     //0x8298 Copyright
+    unsigned char d_0x8298[65] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0x00, 0x00 }; //0x00
+    _dngLib.AddEntry(0x8298, ASCII, d_0x8298, 65);
+
     //0x828D CFARepeatPatternDim
     unsigned char d_0x828D[4] = { 0x00, 0x02, 0x00, 0x02 };
     _dngLib.AddEntry(0x828D, SHORT, d_0x828D, 4);
@@ -128,8 +443,13 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     unsigned char d_0x828E[4] = { 0x00, 0x01, 0x01, 0x02 };
     _dngLib.AddEntry(0x828E, BYTE, d_0x828E, 4);
 
-    //0x8769 ExifIFDPointer
-    //0x8825 GPSIFDPointer
+    //0x8769 ExifIFDPointer  //正規の値は最後にセット
+    unsigned char d_0x8769[4] = { 0x00, 0x00, 0x00, 0x00 };
+    _dngLib.AddEntry(0x8769, LONG, d_0x8769, 4);
+
+    //0x8825 GPSIFDPointer  //正規の値は最後にセット
+    unsigned char d_0x8825[4] = { 0x00, 0x00, 0x00, 0x00 };
+    _dngLib.AddEntry(0x8825, LONG, d_0x8825, 4);
 
     //0xC612 DNGVersion
     unsigned char d_0xc612[4] = { 0x01, 0x04, 0x00, 0x00 }; //1 4 0 0
@@ -140,6 +460,9 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0xc613, BYTE, d_0xc613, 4);
 
     //0xC614 UniqueCameraModel
+    unsigned char d_0xc614[14] = { 0x52, 0x49, 0x43, 0x4F, 0x48, 0x20, 0x54, 0x48, 0x45, 0x54, 0x41, 0x20, 0x58, 0x00 };  //"RICOH THETA X"
+    _dngLib.AddEntry(0xC614, ASCII, d_0xc614, 14);
+
     //0xC617 CFALayout
     unsigned char d_0xc617[2] = { 0x00, 0x01 };
     _dngLib.AddEntry(0xc617, SHORT, d_0xc617, 2);
@@ -220,7 +543,13 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0xc62a, SRATIONAL, d_0xc62a, 8);
 
     //0xC62B BaselineNoise
+    unsigned char d_0xc62b[8] = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01 };
+    _dngLib.AddEntry(0xC62B, RATIONAL, d_0xc62b, 8);
+
     //0xC62C BaselineSharpness
+    unsigned char d_0xc62c[8] = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01 };
+    _dngLib.AddEntry(0xC62C, RATIONAL, d_0xc62c, 8);
+
     //0xC62D BayerGreenSplit
     unsigned char d_0xc62d[4] = { 0x00, 0x00, 0x00, 0x00 };
     _dngLib.AddEntry(0xc62d, LONG, d_0xc62d, 4);
@@ -230,7 +559,17 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0xc62e, RATIONAL, d_0xc62e, 8);
 
     //0xC630 LensInfo
+    unsigned char d_0xc630[8 * 4] = {
+            0x00, 0x00, 0x00, 0xD2, 0x00, 0x00, 0x00, 0x64,      // 210/100
+            0x00, 0x00, 0x00, 0xD2, 0x00, 0x00, 0x00, 0x64,      // 210/100
+            0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00, 0x0A,      // 21/10
+            0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00, 0x0A };    // 21/10
+    _dngLib.AddEntry(0xc630, RATIONAL, d_0xc630, 8 * 4);
+
     //0xC632 AntiAliasStrength
+    unsigned char d_0xc632[8] = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01 };
+    _dngLib.AddEntry(0xc632, RATIONAL, d_0xc632, 8);
+
     //0xC65A CalibrationIlluminant1
     unsigned char d_0xc65a[2] = { 0x00, 0x11 };	//17
     _dngLib.AddEntry(0xc65a, SHORT, d_0xc65a, 2);
@@ -248,15 +587,736 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0xc68d, LONG, d_0xc68d, 4*4);
 
     //0xC71A PreviewColorSpace
+    unsigned char d_0xc71a[4] = { 0x00, 0x00, 0x00, 0x02 };
+    _dngLib.AddEntry(0xc71a, LONG, d_0xc71a, 4);
+
+
+    // exif ifd
+    //dngLib _exifdngLib;
+
+    //0x829A ExposureTime
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x829A ExposureTime");
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x829A) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x829D Fnumber
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x829D) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x8822 ExposureProgram
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x8822) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x8827 PhotographicSensitivity
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x8827) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x8830 SensitivityType
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x8830) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9000 ExifVersion
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9000) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9010 OffsetTime
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9010) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9011 OffsetTimeOriginal
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9011) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9012 OffsetTimeDigitized
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9012) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9003 DateTimeOriginal
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9003) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9004 DateTimeDigitized
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9004) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9101 ComponentConfiguration
+    unsigned char d_0x9101[4] = { 0x01, 0x02, 0x03, 0x00 };
+    _exifdngLib.AddEntry(0x9101, UNDEFINED, d_0x9101, 4);
+
+    //0x9204 ExposureBiasValue
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9204) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9205 MaxApertureRatioValue
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9205) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9207 MeteringMode
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9207) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9208 LightSource
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9208) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x9209 Flash
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x9209) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x920A FocalLength
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0x920A) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0x927C MakerNote     // 正規の値は後でセットする
+    unsigned char d_0x927c[4] = { 0x00, 0x00, 0x00, 0x00 };
+    _exifdngLib.AddEntry(0x927c, UNDEFINED, d_0x927c, 4);
+
+    //0xA300 FileSource
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA300) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0xA401 CustomRendered
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA401) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0xA402 ExposureMode
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA402) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0xA403 WhiteBalance
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA403) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0xA406 SceneCaptureType
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA406) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+    //0xA40A Sharpness
+    searchTag = (enableexif == true) ? _readexitdngLib.searchEntry(0xA40A) : -1;
+    if(searchTag != -1) {
+        _exifdngLib.copyEntry(_readexitdngLib.e_lists[searchTag]);
+    }
+
+
+    // GPS ifd
+    //dngLib _gpsdngLib;
+
+    //0x0000 GPS Version
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0000 GPS Version");
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0000) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0001 GPSLatitudeRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0001) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0002 GPSLatitude
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0002) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0003 GPSLongitudeRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0003) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0004 GPSLongitude
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0004) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0005 GPSAltitudeRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0005) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0006 GPSAltitude
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0006) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0007 GPSTimeStamp
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0007) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0008 GPSSatellites
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0008) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0009 GPSStatus
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0009) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000A GPSMeasureMode
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000A) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000B GPSDOP
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000B) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000C GPSSpeedRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000C) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000D GPSSpeed
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000D) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000E GPSTrackRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000E) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x000F GPSTrack
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x000F) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0010 GPSImgDirectionRef
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0010) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0011 GPSImgDirection
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0011) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x0012 GPSMapDatum
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x0012) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x001B GPSProcessingMethod
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x001B) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+    //0x001D GPSDateStamp
+    searchTag = (enablegpg == true) ? _readgpsdngLib.searchEntry(0x001D) : -1;
+    if(searchTag != -1) {
+        _gpsdngLib.copyEntry(_readgpsdngLib.e_lists[searchTag]);
+    }
+
+
+
+    // MakerNote ifd -------------
+    //dngLib _mndngLib;
+
+    //IDないヘッダー値とかは後ほど
+    //MakerNoteHeader
+    //MakerNoteRicoh entries  <- これはタグ数なのでは…？
+
+    //0x0001 Rdc   //JPEGからコピー箇所　動作確認のため仮値をセット
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0001 Rdc");
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x0001) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x0002 Cpuver
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x0002) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x0003 Cammodel
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x0003) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x0005 Camserial
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x0005) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x1000 ImageQuality
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x1000) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x1003 wbMode
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x1003) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x1307 wbColorTemp
+    searchTag = (enablemaker == true) ? _readmakerdngLib.searchEntry(0x1307) : -1;
+    if(searchTag != -1) {
+        _makerdngLib.copyEntry(_readmakerdngLib.e_lists[searchTag]);
+    }
+
+    //0x4001 ReceptorIFD     //正規の値は後でセット
+    unsigned char d_m0x4001[4] = { 0x00, 0x00, 0x00, 0x00 };
+    _makerdngLib.AddEntry(0x4001, ASCII, d_m0x4001, 4);
+
+
+    // Receptor ifd ------------
+    //dngLib _recepdngLib;
+
+    //ReceptofIFDEntries  <- これはタグ数なのでは…？
+
+    //0x0001 SphereType
+    unsigned char d_r0x0001[2] = { 0x00, 0x03 };
+    _recepdngLib.AddEntry(0x0001, SHORT, d_r0x0001, 2);
+
+    //0x0002 SphereHDR
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x0002 SphereHDR");
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0002) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0003 SpherePitchRoll
+    unsigned char d_r0x0003[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    _recepdngLib.AddEntry(0x0003, SRATIONAL, d_r0x0003, 8);
+
+    //0x0004 SphereYaw
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0004) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0006 SphereNoiseReduction
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0006) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0007 SphereAdjZenith
+    unsigned char d_r0x0007[2] = { 0x00, 0x00 };
+    _recepdngLib.AddEntry(0x0007, SHORT, d_r0x0007, 2);
+
+    //0x000E SphereHhHDR
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x000E) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0013 SphereAdjRollingShutter
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0013) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0015 CenterOfExposureTimeStamp
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0015) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0016 DynamicStitchingResult
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0016) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0101 SphereISOFilmSpeed
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0101) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0102 SphereFNumber
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0102) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0103 SphereExposureTime
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0103) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0106 SphereShootingMode
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0106) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0107 ProcStitching
+    unsigned char d_r0x0107[2] = { 0x00, 0x01 };
+    _recepdngLib.AddEntry(0x0107, SHORT, d_r0x0107, 2);
+
+    //0x0108 ProcZenithCorrection
+    unsigned char d_r0x0108[2] = { 0x00, 0x01 };
+    _recepdngLib.AddEntry(0x0108, SHORT, d_r0x0108, 2);
+
+    //0x0109 ZenithDirection
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0109) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x010A StitchingDownside
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x010A) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x010B ExposureDifferenceGain
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x010B) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x010C DRCompGain
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x010C) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x010D waterHousing
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x010D) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0200 StitchingLensInfo
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0200) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0300 adjAccOffset
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0300) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0301 adjAccGain
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0301) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0302 adjGyroOffset
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0302) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0303 adjGyroGain
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0303) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0310 statusAcc
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0310) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0311 statusGyro
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0311) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0312 statusCompass
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0312) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x0313 statusGPS
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x0313) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1001 FrontTempStart
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1001) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1002 FrontTempEnd
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1002) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1003 RearTempStart
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1003) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1004 RearTempEnd
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1004) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1005 SphereWhiteBalanceRGain1
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1005) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1006 SphereWhiteBalanceBGain1
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1006) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1007 SphereWhiteBalanceRGain2
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1007) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1008 SphereWhiteBalanceBGain2
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1008) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1009 OB1
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1009) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100A OB2
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100A) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100B AnalogGain1
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100B) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100C AnalogGain2
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100C) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100D DiginalGain1
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100D) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100E DiginalGain2
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100E) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x100F AEadjustValue
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x100F) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1010 AWBadjustValue
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1010) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1015 ADB status
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1015) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1101 IMUTempStart
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1101) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
+    //0x1102 IMUTempEnd
+    searchTag = (enablereport == true) ? _readrecepdngLib.searchEntry(0x1102) : -1;
+    if(searchTag != -1) {
+        _recepdngLib.copyEntry(_readrecepdngLib.e_lists[searchTag]);
+    }
+
 
     //Write 0th IFD
     int wt = _dngLib.e_lists.size();
-    int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2;
+
+    int exf_wt = _exifdngLib.e_lists.size();
+    int gps_wt = _gpsdngLib.e_lists.size();
+    int mn_wt = _makerdngLib.e_lists.size();
+    int rec_wt = _recepdngLib.e_lists.size();
+
+    int raw_size = (int)size; //5508 * 5508 * 2;
+
+    unsigned char data8769[4];
+    unsigned char data8825[4];
+    unsigned char data927C[4];
+    unsigned char data4001[4];
+
+    int start_exf = 8 + raw_size + 2 + _dngLib.e_lists.size() * 12 + 4;
+    std::cout << start_exf << std::endl;
+
+    int start_gps = start_exf + 2 + _exifdngLib.e_lists.size() * 12 + 4;
+    int start_mn = start_gps + 2 + _gpsdngLib.e_lists.size() * 12 + 4;
+    int start_rec = start_mn + 2 + _makerdngLib.e_lists.size() * 12 + 4 + 8; //MakerNoteのhead分
+
+    //int test = (int)(ofs.tellp())+ 2 +_dngLib.e_lists.size() * 12 + 4;
+    //__android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] ofs.tellp()=%x test=%x", (int)(ofs.tellp()), test);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0 size=%d exif size=%d gps size=%d mn size=%d", _dngLib.e_lists.size(), _exifdngLib.e_lists.size(), _gpsdngLib.e_lists.size(), _makerdngLib.e_lists.size());
+
+    for (int i = 0; i < 4; i++) {
+        data8769[3 - i] = start_exf & 0xff;
+        data8825[3 - i] = start_gps & 0xff;
+        data927C[3 - i] = start_mn & 0xff;
+        data4001[3 - i] = start_rec & 0xff;
+
+        //std::cout << (unsigned int)((unsigned char)data8769[3 - i]) << std::endl;
+        start_exf = start_exf >> 8;
+        start_gps = start_gps >> 8;
+        start_mn = start_mn >> 8;
+        start_rec = start_rec >> 8;
+    }
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_exf data8769=%x%x%x%x", data8769[0], data8769[1], data8769[2], data8769[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_gps data8825=%x%x%x%x", data8825[0], data8825[1], data8825[2], data8825[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_mn data927C=%x%x%x%x", data927C[0], data927C[1], data927C[2], data927C[3]);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] start_rec data4001=%x%x%x%x", data4001[0], data4001[1], data4001[2], data4001[3]);
+
+
+    //offset
+    // 0th IFD : 0x8769 ExifIFDPointer
+    _dngLib.DeleteEntry(0x8769);
+    _dngLib.AddEntry(0x8769, LONG, data8769, 4);
+
+    // 0th IFD : 0x8825 GPSIFDPointer
+    _dngLib.DeleteEntry(0x8825);
+    _dngLib.AddEntry(0x8825, LONG, data8825, 4);
+
+    // Exif IFD : 0x927C MakerNote
+    _exifdngLib.DeleteEntry(0x927C);
+    _exifdngLib.AddEntry(0x927C, UNDEFINED, data927C, 8 + 2 + (12 * mn_wt));
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] data927C size=%x", 8 + 2 + (12 * mn_wt));
+
+    // MakerNote : 0x4001 ReceptorIFD
+    _makerdngLib.DeleteEntry(0x4001);
+    _makerdngLib.AddEntry(0x4001, LONG, data4001, 4);
+
+
     char wtotal[2] = { (char)(wt / 256), (char)(wt % 256) };
+    //dng main part size
     ofs.write(wtotal, 2);
+    //2(count) + count * 12 + 4(NextIFD=0)
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
 
-    for (int i = 0; i < wt; i++) {
+    //debug -------
+    /*dngEntry *e_exif_1 = _dngLib.e_lists[_dngLib.searchEntry(0x8769)];
+    //long eofs = b2i(e_exif_->edata, 4);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8769=%x %x %x %x", e_exif_1->edata[0], e_exif_1->edata[1],e_exif_1->edata[2],e_exif_1->edata[3]);
 
+    dngEntry *e_exif_2 = _dngLib.e_lists[_dngLib.searchEntry(0x8825)];
+    //long eofs = b2i(e_exif_->edata, 4);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8825=%x %x %x %x", e_exif_2->edata[0], e_exif_2->edata[1],e_exif_2->edata[2],e_exif_2->edata[3]);
+
+    dngEntry *e_exif_3 = _exifdngLib.e_lists[_exifdngLib.searchEntry(0x927C)];
+    //long eofs = b2i(e_exif_->edata, 4);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x927C=%x %x %x %x", e_exif_3->edata[0], e_exif_3->edata[1],e_exif_3->edata[2],e_exif_3->edata[3]);
+
+    dngEntry *e_exif_4 = _mndngLib.e_lists[_mndngLib.searchEntry(0x4001)];
+    //long eofs = b2i(e_exif_->edata, 4);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x4001=%x %x %x %x", e_exif_4->edata[0], e_exif_4->edata[1],e_exif_4->edata[2],e_exif_4->edata[3]);*/
+    //debug -------
+
+
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4y;
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4;
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4 + 8 + 2 + (12 * mn_wt) + 4;
+    int offset = (int)(ofs.tellp()) + (12 * wt) + 4 + 2 + (12 * exf_wt) + 4 + 2 + (12 * gps_wt) + 4 + 8 + 2 + (12 * mn_wt) + 4 + 2 + (12 * rec_wt) + 4;
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] offset=%x ofs.tellp=%x", offset, (int)(ofs.tellp()));
+
+    for (int i = 0; i < _dngLib.e_lists.size(); i++) {
         dngEntry *e = _dngLib.e_lists[i];
         int dl = e->length;
         int dn = b2i(e->num, 4);
@@ -270,14 +1330,17 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
         //edataの長さとdlengthからoffsetに書くか、そのまま書くか
         if (bnum <= 4) {
             //std::cout << "dng tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "dng tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, bnum) );
             ofs.write(e->edata, bnum);
             ofs.seekp(cadr + 12, std::ios_base::beg);
 
         }
         else {
             //std::cout << "dng tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△dng tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, bnum) );
             char pos[4];
             i2b(offset, pos);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△dng tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
             ofs.write(pos, 4);
             offset += bnum;
             if (bnum % 2 == 1) {
@@ -289,8 +1352,199 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     char z[4] = { 0,0,0,0 };
     ofs.write(z, 4);
 
+
+    // -----------------------
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "exif start point=%x ", (int)ofs.tellp());
+    //additional data(exifIFD, gpsIFD, extra, extra-exif, extra-gps)
+    //exif
+    wtotal[0] = (char)(exf_wt / 256);
+    wtotal[1] = (char)(exf_wt % 256);
+    ofs.write(wtotal, 2);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
+    for (int i = 0; i < _exifdngLib.e_lists.size(); i++) {
+        dngEntry *e = _exifdngLib.e_lists[i];
+        //edataの長さとdlengthからoffsetに書くか、そのまま書くか
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        int cadr = ofs.tellp();
+        ofs.write(e->tag, 2);
+        ofs.write(e->typ, 2);
+        ofs.write(e->num, 4);
+        if (bnum <= 4 || b2i(e->tag,sizeof(e->tag)) == 0x927C) {
+            //std::cout << "exif tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, bnum) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
+            ofs.write(e->edata, bnum);
+            ofs.seekp(cadr + 12, std::ios_base::beg);
+        }
+        else {
+            //std::cout << "exif tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%x write point=%x ", b2i(e->tag, sizeof(e->tag)), cadr);
+            char pos[4];
+            i2b(offset, pos);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△exif tag=%x offset point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            ofs.write(pos, 4);
+            offset += bnum;
+            if (bnum % 2 == 1) {
+                offset += 1;
+            }
+        }
+    }
+    ofs.write(z, 4);
+
+    //gps
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "gps start point=%x ", (int) ofs.tellp());
+    wtotal[0] = (char) (gps_wt / 256);
+    wtotal[1] = (char) (gps_wt % 256);
+    ofs.write(wtotal, 2);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] wtotal=%x %x", wtotal[0],wtotal[1]);
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
+    if(enablegpg) {
+        for (int i = 0; i < gps_wt; i++) {
+            dngEntry *e = _gpsdngLib.e_lists[i];
+            //edataの長さとdlengthからoffsetに書くか、そのまま書くか
+            int dl = e->length;
+            int dn = b2i(e->num, 4);
+            int bnum = dl * dn;
+
+            int cadr = ofs.tellp();
+            ofs.write(e->tag, 2);
+            ofs.write(e->typ, 2);
+            ofs.write(e->num, 4);
+            if (bnum <= 4) {
+                // std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
+                __android_log_print(ANDROID_LOG_DEBUG, TAG,
+                                    "gps tag=%d type=%d size=%d num=%d data=%d",
+                                    b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)),
+                                    e->length, b2i(e->num, sizeof(e->num)),
+                                    b2i(e->edata, sizeof(e->edata)));
+                ofs.write(e->edata, bnum);
+                ofs.seekp(cadr + 12, std::ios_base::beg);
+
+            } else {
+                // std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
+                __android_log_print(ANDROID_LOG_DEBUG, TAG,
+                                    "△gps tag=%d type=%d size=%d num=%d data=%d",
+                                    b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)),
+                                    e->length, b2i(e->num, sizeof(e->num)),
+                                    b2i(e->edata, sizeof(e->edata)));
+                char pos[4];
+                i2b(offset, pos);
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "△gps tag=%x point=%x ",
+                                    b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+                ofs.write(pos, 4);
+                offset += bnum;
+                if (bnum % 2 == 1) {
+                    offset += 1;
+                }
+            }
+        }
+    }
+    ofs.write(z, 4);
+
+    //makernote
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "makerNote start point=%x ", (int)ofs.tellp());
+    char mnhead[8] = { 0x52,0x69,0x63,0x6f,0x68,0x00,0x00,0x00 };  //Ricoh000
+    ofs.write(mnhead, 8);
+
+    wtotal[0] = (char)(mn_wt / 256);
+    wtotal[1] = (char)(mn_wt % 256);
+    ofs.write(wtotal, 2);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
+    for (int i = 0; i < mn_wt; i++) {
+        dngEntry *e = _makerdngLib.e_lists[i];
+        //edataの長さとdlengthからoffsetに書くか、そのまま書くか
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        int cadr = ofs.tellp();
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "makerNote point=%x ", (int)ofs.tellp());
+        ofs.write(e->tag, 2);
+        ofs.write(e->typ, 2);
+        ofs.write(e->num, 4);
+        if (bnum <= 4) {
+            //           std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "maker data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
+            ofs.write(e->edata, bnum);
+            ofs.seekp(cadr + 12, std::ios_base::beg);
+        }
+        else {
+//            std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△maker tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            char pos[4];
+            i2b(offset, pos);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△maker tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            ofs.write(pos, 4);
+            offset += bnum;
+            if (bnum % 2 == 1) {
+                offset += 1;
+            }
+        }
+    }
+    ofs.write(z, 4);
+
+
+    // Receptor IFD
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor start point=%x ", (int)ofs.tellp());
+
+    wtotal[0] = (char)(rec_wt / 256);
+    wtotal[1] = (char)(rec_wt % 256);
+    ofs.write(wtotal, 2);
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] wtotal=%x %x", wtotal[0], wtotal[1]);
+    //int offset = (int)(ofs.tellp()) + (12 * wt) + 4;
+    for (int i = 0; i < rec_wt; i++) {
+        dngEntry *e = _recepdngLib.e_lists[i];
+        //edataの長さとdlengthからoffsetに書くか、そのまま書くか
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        int cadr = ofs.tellp();
+        ofs.write(e->tag, 2);
+        ofs.write(e->typ, 2);
+        ofs.write(e->num, 4);
+        if (bnum <= 4) {
+            //           std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data= " << b2i(e->dat, sizeof(e->dat)) << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "Receptor data=%x%x%x%x", e->edata[0],e->edata[1],e->edata[2],e->edata[3]);
+            ofs.write(e->edata, bnum);
+            ofs.seekp(cadr + 12, std::ios_base::beg);
+
+        }
+        else {
+//            std::cout << "gps tag= " << b2i(e->tag, sizeof(e->tag)) << " type= " << b2i(e->typ, sizeof(e->typ)) << " size= " << e->length << " num= " << b2i(e->num, sizeof(e->num)) << " data(offset)= " << offset << std::endl;
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△Receptor tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)),  b2i(e->edata, sizeof(e->edata)) );
+            char pos[4];
+            i2b(offset, pos);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "△Receptor tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), b2i(pos, sizeof(pos)));
+            ofs.write(pos, 4);
+            offset += bnum;
+            if (bnum % 2 == 1) {
+                offset += 1;
+            }
+        }
+    }
+    ofs.write(z, 4);
+
+
+
+
+    //------offsetの値を書き込み------------
+
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG,"[HDR-DNG-TEST] _dngLib.e_lists.size()=%d wt=%d  _exifdngLib.e_lists.size()=%d exf_wt=%d _gpsdngLib.e_lists.size()=%d gps_wt=%d", _dngLib.e_lists.size(), wt, _exifdngLib.e_lists.size(), exf_wt, _gpsdngLib.e_lists.size(), gps_wt);
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra start point=%x ", (int)ofs.tellp());
     //extra
-    for (int i = 0; i < wt; i++) {
+    for (int i = 0; i < _dngLib.e_lists.size(); i++) {
         dngEntry *e = _dngLib.e_lists[i];
         int dl = e->length;
         int dn = b2i(e->num, 4);
@@ -300,11 +1554,93 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
             ; //no extra
         }
         else {
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra tag=%x point=%x ", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp());
             ofs.write(e->edata, bnum);
             char z[1] = { 0 };
             if (bnum % 2 != 0) ofs.write(z, 1);//fill
         }
     }
+
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif start point=%x ", (int)ofs.tellp());
+    //仮
+    //exif extra
+    for (int i = 0; i < _exifdngLib.e_lists.size(); i++) {
+        dngEntry *e = _exifdngLib.e_lists[i];
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        if (bnum <= 4 || b2i(e->tag,sizeof(e->tag)) == 0x927C) {
+            ; //no extra
+        }
+        else {
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
+            if(b2i(e->tag, sizeof(e->tag)) == 36880){
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6]);
+            }
+
+            ofs.write(e->edata, bnum);
+            char z[1] = { 0 };
+            if (bnum % 2 != 0) ofs.write(z, 1);//fill
+        }
+    }
+
+    if(enablegpg) {
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra gps start point=%x ", (int) ofs.tellp());
+        //gps extra
+        for (int i = 0; i < gps_wt; i++) {
+            dngEntry *e = _gpsdngLib.e_lists[i];
+            int dl = e->length;
+            int dn = b2i(e->num, 4);
+            int bnum = dl * dn;
+
+            if (bnum <= 4) { ; //no extra
+            } else {
+                __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra gps tag=%x point=%x ",
+                                    b2i(e->tag, sizeof(e->tag)), (int) ofs.tellp());
+                ofs.write(e->edata, bnum);
+                char z[1] = {0};
+                if (bnum % 2 != 0) ofs.write(z, 1);//fill
+            }
+        }
+    }
+
+    //MakerNote extra
+    for (int i = 0; i < mn_wt; i++) {
+        dngEntry *e = _makerdngLib.e_lists[i];
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        if (bnum <= 4) {
+            ; //no extra
+        }
+        else {
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra MakerNote tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
+            ofs.write(e->edata, bnum);
+            char z[1] = { 0 };
+            if (bnum % 2 != 0) ofs.write(z, 1);//fill
+        }
+    }
+
+    //Receptor extra
+    for (int i = 0; i < rec_wt; i++) {
+        dngEntry *e = _recepdngLib.e_lists[i];
+        int dl = e->length;
+        int dn = b2i(e->num, 4);
+        int bnum = dl * dn;
+
+        if (bnum <= 4) {
+            ; //no extra
+        }
+        else {
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra Receptor tag=%x point=%x bnum=%d", b2i(e->tag, sizeof(e->tag)), (int)ofs.tellp(), bnum);
+            ofs.write(e->edata, bnum);
+            char z[1] = { 0 };
+            if (bnum % 2 != 0) ofs.write(z, 1);//fill
+        }
+    }
+    // -----------------------
 
     ofs.close();
 
@@ -338,6 +1674,61 @@ int dngLib::dtype2bytenum(int id) {
     }
 }
 
+int dngLib::searchEntry(int tag) {
+    for (int i = 0; i < (int)e_lists.size(); ++i) {
+        int t = b2i(e_lists[i]->tag, 2);
+        if (t == tag) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void dngLib::DeleteEntry(int tag) {
+    int ei = searchEntry(tag);
+    if (ei >= 0) {
+        e_lists.erase(e_lists.begin() + ei);
+    }
+    //std::wcout << "delete entry " << tag << std::endl;
+}
+
+void dngLib::readEntryEach(std::ifstream& ifs, int adr, dngEntry& e) {
+    ifs.seekg(adr, std::ios_base::beg);
+    ifs.read(e.tag, 2);
+    ifs.read(e.typ, 2);
+    ifs.read(e.num, 4);
+    ifs.read(e.dat, 4);
+
+    int dlength = dtype2bytenum(b2i(e.typ, sizeof(e.typ)));
+    e.length = dlength;
+    int dnum = b2i(e.num, sizeof(e.num));
+    int rbytenum = dlength * dnum;
+    if (rbytenum <= 4) {
+        e.new_edata(4);
+        e.edata[0] = e.dat[0];
+        e.edata[1] = e.dat[1];
+        e.edata[2] = e.dat[2];
+        e.edata[3] = e.dat[3];
+    }
+    else {
+        //e.edata.resize(rbytenum);
+        e.new_edata(rbytenum);
+        //long c_adr = ifs.tellg();
+        long t_adr = b2i(e.dat, sizeof(e.dat));
+        t_adr = t_adr + 12;
+        ifs.seekg(t_adr, std::ios_base::beg);
+        ifs.read(e.edata, rbytenum);
+        //ifs.seekg(c_adr+4, std::ios_base::beg);
+    }
+}
+
+int dngLib::readEntryCnt(std::ifstream& ifs, int adr) {
+    ifs.seekg(adr, std::ios_base::beg);
+    char ver[2];
+    ifs.read(ver, 2);
+    return b2i(ver, sizeof(ver));
+}
+
 void dngLib::AddEntry(int _tag, int _typ, unsigned char * _dat, int _num)
 {
     dngEntry *e = new dngEntry();
@@ -351,6 +1742,7 @@ void dngLib::AddEntry(int _tag, int _typ, unsigned char * _dat, int _num)
     (e->typ)[0] = 0xff & (_typ >> 8);
 
     int _length = dtype2bytenum(b2i(e->typ, sizeof(e->typ)));
+    if(_tag == 0x8769) __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] 0x8769 Entry length=%d", _length );
     e->length = _length;
 
     int __num = _num / e->length;
@@ -359,15 +1751,76 @@ void dngLib::AddEntry(int _tag, int _typ, unsigned char * _dat, int _num)
     (e->num)[1] = 0xff & (_num >> 16);
     (e->num)[0] = 0xff & (_num >> 24);
 
-    e->new_edata(_num);
-    for (int i = 0; i < _num; i++) {
-        (e->edata)[i] = _dat[i];
+    if(_tag == 0x927C){
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] Entry type=%d", _length );
+        int mn_num = 4;
+        e->new_edata(mn_num);
+        for (int i = 0; i < mn_num; i++) {
+            (e->edata)[i] = _dat[i];
+        }
+    }else{
+        e->new_edata(_num);
+        for (int i = 0; i < _num; i++) {
+            (e->edata)[i] = _dat[i];
+        }
     }
+
 
     //std::cout << int(e->tag[0]) << std::endl;
     //std::cout << int(e->tag[1]) << std::endl;
     //std::cout << e->typ << std::endl;
     //std::cout << e->num << std::endl;
 
+    e_lists.push_back(e);
+}
+
+void dngLib::copyEntry(dngEntry * src)
+{
+    dngEntry *e = new dngEntry();
+
+    (e->tag)[1] = (src->tag)[1];
+    (e->tag)[0] = (src->tag)[0];
+
+    (e->typ)[1] = (src->typ)[1];
+    (e->typ)[0] = (src->typ)[0];
+
+    int _length = dtype2bytenum(b2i(e->typ, sizeof(e->typ)));
+    e->length = _length;
+
+    for (int i = 0; i < 4; i++) {
+        (e->num)[i] = (src->num)[i];
+    }
+
+    int dnum = b2i(e->num, sizeof(e->num));
+    int rbytenum = _length * dnum;
+    if (rbytenum <= 4) {
+        e->new_edata(4);
+        e->edata[0] = src->dat[0];
+        e->edata[1] = src->dat[1];
+        e->edata[2] = src->dat[2];
+        e->edata[3] = src->dat[3];
+        if(b2i(e->tag, sizeof(e->tag)) == 1){
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag0001 srcdata =%x rbytenum=%d", b2i(src->dat, rbytenum),rbytenum);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag0001 =%x%x%x%x", e->edata[0], e->edata[1], e->edata[2], e->edata[3]);
+        }
+    }
+    else {
+        e->new_edata(rbytenum);
+        for (int i = 0; i < rbytenum; i++) {
+            //(e->edata)[i] = _dat[i];
+            e->edata[i] = src->edata[i];
+        }
+        __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] copyEntry edata: edata=%d", b2i(e->edata, 4) );
+        /*if(b2i(e->tag, sizeof(e->tag)) == 36880){
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6]);
+        }
+        //0x0131
+        if(b2i(e->tag, sizeof(e->tag)) == 305){
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x", e->edata[0], e->edata[1], e->edata[2], e->edata[3], e->edata[4], e->edata[5], e->edata[6], e->edata[7]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x", e->edata[8], e->edata[9], e->edata[10], e->edata[11], e->edata[12], e->edata[13], e->edata[14], e->edata[15]);
+            __android_log_print(ANDROID_LOG_DEBUG, TAG, "extra exif tag36880 =%x %x %x %x %x %x %x %x %x", e->edata[16], e->edata[17], e->edata[18], e->edata[19], e->edata[20], e->edata[21], e->edata[22], e->edata[23], e->edata[24]);
+        }*/
+    }
+    __android_log_print(ANDROID_LOG_DEBUG, TAG, "[HDR-DNG-TEST] copyEntry: tag=%d type=%d size=%d num=%d data=%d", b2i(e->tag, sizeof(e->tag)), b2i(e->typ, sizeof(e->typ)), e->length, b2i(e->num, sizeof(e->num)), b2i(e->edata, 4));
     e_lists.push_back(e);
 }

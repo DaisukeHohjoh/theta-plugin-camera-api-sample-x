@@ -55,6 +55,11 @@ private:
 public:
     std::vector <dngEntry*> e_lists;
     void AddEntry(int tag, int typ, unsigned char * dat, int num);
+    int searchEntry(int tag);
+    void DeleteEntry(int tag);
+    void readEntryEach(std::ifstream& ifs, int adr, dngEntry& e);
+    int readEntryCnt(std::ifstream& ifs, int adr);
+    void copyEntry(dngEntry * src);
 };
 
 #endif //THETA_PLUGIN_CAMERA_API_SAMPLE_X_DNGLIB_H
