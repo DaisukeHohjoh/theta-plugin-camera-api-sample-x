@@ -317,8 +317,8 @@ Java_com_theta360_sample_camera_MainActivity_rawToDng(
     _dngLib.AddEntry(0x0101, LONG, d_0x0101, 4);
 
     //0x0102 BitsPerSample
-    unsigned char d_0x0102[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x10 }; //16  cnt=3
-    _dngLib.AddEntry(0x0102, SHORT, d_0x0102, 6);
+    unsigned char d_0x0102[2] = {0x00, 0x10 }; //16 
+    _dngLib.AddEntry(0x0102, SHORT, d_0x0102, 2);
 
     //0x0103 Compression
     unsigned char d_0x0103[2] = { 0x00, 0x01 }; //1:Uncompressed
