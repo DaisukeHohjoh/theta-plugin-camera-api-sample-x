@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Camera API Sample</string>
+    <string name="app_name">HDR-DNG Capture</string>
     <string-array name="RIC_SHOOTING_MODE_PREVIEW_OLD_ARRAY">
         <item>RicPreview1024</item>
         <item>RicPreview1920</item>
