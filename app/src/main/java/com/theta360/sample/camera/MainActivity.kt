@@ -1,5 +1,10 @@
 package com.theta360.sample.camera
 
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.Context
+import android.content.DialogInterface
+import android.content.res.AssetManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.os.Bundle
@@ -7,14 +12,12 @@ import android.os.Handler
 import android.util.Log
 import android.view.KeyEvent
 import android.view.TextureView
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.Spinner
-import android.widget.Switch
+import android.widget.*
 import com.theta360.pluginlibrary.activity.PluginActivity
 import com.theta360.pluginlibrary.activity.ThetaInfo
 import com.theta360.pluginlibrary.callback.KeyCallback
 import com.theta360.pluginlibrary.receiver.KeyReceiver
+import fi.iki.elonen.NanoHTTPD
 import theta360.hardware.Camera
 import theta360.media.CamcorderProfile
 import theta360.media.MediaRecorder
@@ -22,7 +25,9 @@ import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+
 class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
+
     companion object {
         private val RIC_SHOOTING_MODE = "RIC_SHOOTING_MODE"
         private val RIC_PROC_STITCHING = "RIC_PROC_STITCHING"
@@ -39,6 +44,21 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
 
         enum class MODE {
             IMAGE, VIDEO, PREVIEW
+        }
+
+        fun remoteTakePicture() {
+            Log.d(TAG, "remoteTakePicture")
+            execShellCommand("input", "keyevent", "27")
+        }
+
+        @Throws(IOException::class)
+        fun execShellCommand(vararg command: String?) {
+            val process = ProcessBuilder(*command).start()
+            val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+            var line: String?
+            while (bufferedReader.readLine().also { line = it } != null) {
+                Log.i(TAG, line)
+            }
         }
     }
 
@@ -70,6 +90,13 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         manager
     }
 
+    //webserver
+    private var mWebServer: WebServer? = null
+
+    //alert
+    private var mAlertDialog: AlertDialog.Builder? = null
+    private var mImageView: ImageView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i(TAG,"onCreate")
         super.onCreate(savedInstanceState)
@@ -86,6 +113,7 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
         val spinner_ric_proc_stitching: Spinner      = findViewById<Spinner>(R.id.spinner_ric_proc_stitching)
         val spinner_ric_proc_zenith_correction: Spinner = findViewById<Spinner>(R.id.spinner_ric_proc_zenith_correction)
         val spinner_picture_format: Spinner             = findViewById<Spinner>(R.id.spinner_picture_format)
+        val image_view_qrcode_icon: ImageView = findViewById<ImageView>(R.id.image_view_qrcode_icon)
 
         //KeyCallback
         setKeyCallback(object : KeyCallback {
@@ -189,6 +217,28 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
                 switch_camera.isChecked = true  //start preview
             }
         }
+
+        //WebServer
+        mWebServer = WebServer(this)
+
+        //AlertDialog
+        mAlertDialog = AlertDialog.Builder(this)
+        mImageView = ImageView(this)
+        mImageView!!.setImageResource(R.drawable.qrcode)
+        mAlertDialog!!.setView(mImageView)
+        mAlertDialog!!.setTitle("Remote Shutter by WebUI")
+        mAlertDialog!!.setPositiveButton("CLOSE", DialogInterface.OnClickListener { dialog, which ->
+            //TODO
+        })
+        image_view_qrcode_icon.setOnClickListener {
+            mAlertDialog!!.show()
+        }
+    }
+
+    override fun onDestroy() {
+        Log.i(TAG, "onDestroy")
+        mWebServer!!.destroy()
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -658,5 +708,113 @@ class MainActivity : PluginActivity(), MediaRecorder.OnInfoListener {
     init
     {
         System.loadLibrary("dngLib")
+    }
+
+    //WebServer
+    class WebServer(context: Context) : Activity() {
+
+        companion object {
+            private val PORT = 8888
+            private val TAG = "Camera_API_Sample"
+        }
+
+        private var context: Context
+        private var server: SimpleHttpd? = null
+
+        init {
+            Log.d(TAG, "init server")
+            this.context = context
+            create()
+        }
+
+        fun create() {
+            try {
+                server = SimpleHttpd(context)
+                server!!.start()
+                Log.d(TAG, "Start server")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        fun destroy() {
+            if (server != null) {
+                server!!.stop()
+                Log.d(TAG, "Stop server")
+            }
+        }
+
+        private class SimpleHttpd(context: Context) : NanoHTTPD(PORT) {
+
+            var context: Context = context
+            override fun serve(session: IHTTPSession): Response {
+                val assetManager: AssetManager = context!!.getAssets()
+                var `is`: InputStream? = null
+                val uri = session.uri
+                var method: Method = session.method
+                when (method) {
+                    NanoHTTPD.Method.GET -> {
+                        if ("/" == uri) {
+
+                            return try {
+                                `is` =
+                                    assetManager.open("index.html") // このInputStreamはNanoHTTPD側でcloseしてくれる
+                                newChunkedResponse(Response.Status.OK, "text/html", `is`)
+                            } catch (e: IOException) {
+                                e.printStackTrace()
+                                newFixedLengthResponse(
+                                    Response.Status.INTERNAL_ERROR,
+                                    "text/plain",
+                                    e.message
+                                )
+                            }
+                        } else {
+                            return serveFile(uri)
+
+                        }
+                    }
+                    NanoHTTPD.Method.POST -> {
+                        Log.d(TAG, "receive post")
+                        remoteTakePicture()
+                        `is` =
+                            assetManager.open("index.html") // このInputStreamはNanoHTTPD側でcloseしてくれる
+                        return newChunkedResponse(Response.Status.OK, "text/html", `is`)
+                    }
+                }
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "error")
+            }
+
+            fun serveFile(uri: String): NanoHTTPD.Response {
+
+                var filename = uri
+                if (uri.substring(0, 1) == "/") {
+                    filename = filename.substring(1)
+                }
+                val `as`: AssetManager = context.getResources().getAssets()
+                var fis: InputStream? = null
+                try {
+                    fis = `as`.open(uri)
+                } catch (e: java.lang.Exception) {
+                }
+    
+                return if (uri.endsWith(".jpg") || uri.endsWith(".JPG")) {
+                    NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "image/jpeg", fis)
+                } else if (uri.endsWith(".png") || uri.endsWith(".PNG")) {
+                    NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "image/png", fis)
+                } else if (uri.endsWith(".ico")) {
+                    NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "image/x-icon", fis)
+                } else if (uri.endsWith(".svg") || uri.endsWith(".SVG")) {
+                    NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "image/svg+xml", fis)
+                } else if (uri.endsWith(".css")) {
+                    NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "text/html", fis)
+                } else {
+                    NanoHTTPD.newFixedLengthResponse(
+                        NanoHTTPD.Response.Status.NOT_FOUND,
+                        "text/plain",
+                        ""
+                    )
+                }
+            }
+        }
     }
 }

@@ -1,0 +1,10 @@
+body {
+    display: flex;
+    justify-content: center; /* 横方向の中央揃え */
+    align-items: center; /* 縦方向の中央揃え */
+    height: 100vh; /* ビューポートの高さいっぱいにbodyを拡張する */
+    margin: 0; /* 余白をなくす */}
+
+.my_button {
+    font-size: 32pt;
+}
